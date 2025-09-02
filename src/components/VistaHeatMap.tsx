@@ -8,7 +8,8 @@ import AddIcon from '@mui/icons-material/Add';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import { styled } from '@mui/material/styles';
-import { format, isAfter, isBefore, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
+import { supabase } from '../lib/supabase';
 
 declare module 'leaflet' {
   function heatLayer(latlngs: number[][], options?: any): any;
@@ -96,69 +97,147 @@ const VistaHeatMap: React.FC = () => {
     startDate: '',
     endDate: ''
   });
-  const [showFilters, setShowFilters] = useState(false);
+
 
   // Load encounters from localStorage on component mount
   useEffect(() => {
-    const loadEncounters = () => {
-      // Load sample data
-      const sampleEncounters: EncounterData[] = [
-        {
-          id: '1',
-          lat: 33.2002,
-          lng: -117.2425,
-          timestamp: new Date(),
-          notes: 'Family of 3 near shopping center',
-          individualCount: 3,
-          services: ['food', 'clothing']
-        },
-        {
-          id: '2',
-          lat: 33.1934,
-          lng: -117.2447,
-          timestamp: new Date(),
-          notes: 'Individual under bridge',
-          individualCount: 1,
-          services: ['medical']
-        },
-        {
-          id: '3',
-          lat: 33.1995,
-          lng: -117.242,
-          timestamp: new Date(),
-          notes: 'ERF3 Contact - Vista Village Dr & Civic Center Dr',
-          individualCount: 2,
-          services: ['food', 'clothing']
-        },
-        {
-          id: '4',
-          lat: 33.195,
-          lng: -117.236,
-          timestamp: new Date(),
-          notes: 'ERF3 Contact - Mar Vista Dr & Melrose Dr',
-          individualCount: 1,
-          services: ['medical', 'housing']
-        },
-      ];
-
-      // Load client intake encounters from localStorage
-      const storedEncounters = localStorage.getItem('clientEncounters');
-      console.log('Loading encounters from localStorage:', storedEncounters);
+    const loadEncounters = async () => {
+      // First, try to load encounters from localStorage (from your original data)
+      let localStorageEncounters: EncounterData[] = [];
       
-      const intakeEncounters: EncounterData[] = storedEncounters 
-        ? JSON.parse(storedEncounters).map((encounter: any) => ({
-            ...encounter,
-            timestamp: new Date(encounter.timestamp)
-          }))
-        : [];
+      try {
+        // Check all possible localStorage keys for encounter data
+        console.log('🔍 Scanning all localStorage keys...');
+        Object.keys(localStorage).forEach(key => {
+          console.log(`   - Found key: "${key}"`);
+        });
+        
+        // Try different possible keys - prioritize clientEncounters from import
+        const possibleKeys = ['clientEncounters', 'encounters', 'activeClients', 'clients', 'clientData', 'interactions', 'outreach_encounters'];
+        let foundData = null;
+        let foundKey = null;
+        
+        for (const key of possibleKeys) {
+          const data = localStorage.getItem(key);
+          if (data) {
+            console.log(`✅ Found data under key "${key}":`, data.substring(0, 200) + '...');
+            foundData = data;
+            foundKey = key;
+            break;
+          }
+        }
+        
+        if (foundData) {
+          const parsed = JSON.parse(foundData);
+          console.log(`📊 Parsed data from "${foundKey}":`, parsed.length ? `Array with ${parsed.length} items` : typeof parsed);
+          
+          if (Array.isArray(parsed)) {
+            localStorageEncounters = parsed
+              .filter((item: any) => {
+                // Only include items that have GPS coordinates
+                const hasCoords = (item.lat || item.latitude) && (item.lng || item.longitude);
+                if (!hasCoords) {
+                  console.log('⚠️ Skipping item without GPS:', item);
+                }
+                return hasCoords;
+              })
+              .map((item: any, index: number) => {
+                const lat = parseFloat(item.lat || item.latitude);
+                const lng = parseFloat(item.lng || item.longitude);
+                
+                // Log first few coordinates to verify they're different
+                if (index < 5) {
+                  console.log(`📍 Encounter ${index + 1} GPS: ${lat}, ${lng}`);
+                }
+                
+                return {
+                  id: item.id || `encounter-${Date.now()}-${index}`,
+                  lat: lat,
+                  lng: lng,
+                  timestamp: new Date(item.timestamp || item.date || item.interaction_date || item.created_at || item.updated_at || Date.now()),
+                  notes: item.notes || item.description || `Client: ${item.first_name || item.name || 'Unknown'}${item.last_name ? ' ' + item.last_name : ''}`,
+                  individualCount: item.individualCount || 1,
+                  services: item.services || ['general']
+                };
+              });
+            
+            // Check coordinate distribution
+            const uniqueCoords = new Set(localStorageEncounters.map(e => `${e.lat},${e.lng}`));
+            console.log(`✅ Loaded ${localStorageEncounters.length} encounters with GPS coordinates`);
+            console.log(`🗺️ Unique coordinate pairs: ${uniqueCoords.size} of ${localStorageEncounters.length}`);
+            
+            if (uniqueCoords.size < 10) {
+              console.log('⚠️ Warning: Most encounters have same coordinates, showing first few:');
+              Array.from(uniqueCoords).slice(0, 5).forEach(coord => console.log(`   - ${coord}`));
+            }
+          }
+        } else {
+          console.log('❌ No encounter data found in localStorage');
+        }
+      } catch (error) {
+        console.error('❌ Failed to load encounters from localStorage:', error);
+      }
 
-      console.log('Parsed intake encounters:', intakeEncounters);
+      // Load GPS interactions from Supabase instead of localStorage client data
+      // This prevents bulk imported clients from skewing the heat map
+      let gpsInteractions: EncounterData[] = [];
+      
+      try {
+        console.log('Attempting to load GPS interactions from Supabase...');
+        const { data: interactions, error } = await supabase
+          .from('client_interactions')
+          .select(`
+            id,
+            location_lat,
+            location_lng,
+            interaction_date,
+            notes,
+            worker_name,
+            services_provided,
+            client_status
+          `)
+          .not('location_lat', 'is', null)
+          .not('location_lng', 'is', null);
 
-      // Combine sample data with intake data
-      const combinedEncounters = [...sampleEncounters, ...intakeEncounters];
-      console.log('Combined encounters for heat map:', combinedEncounters);
-      setEncounters(combinedEncounters);
-      setFilteredEncounters(combinedEncounters); // Initially show all
+        console.log('Supabase response:', { interactions, error });
+
+        if (error) {
+          console.error('Error loading GPS interactions:', error);
+        } else if (interactions && interactions.length > 0) {
+          gpsInteractions = interactions.map((interaction: any) => ({
+            id: interaction.id,
+            lat: interaction.location_lat,
+            lng: interaction.location_lng,
+            timestamp: new Date(interaction.interaction_date),
+            notes: `${interaction.worker_name}: ${interaction.notes}${interaction.client_status ? ` (Status: ${interaction.client_status})` : ''}`,
+            individualCount: 1,
+            services: interaction.services_provided || []
+          }));
+          console.log(`✅ Loaded ${gpsInteractions.length} GPS interactions from Supabase`);
+        } else {
+          console.log('ℹ️ No GPS interactions found in database yet');
+        }
+      } catch (error) {
+        console.error('❌ Failed to load GPS interactions:', error);
+      }
+
+      // Combine localStorage encounters with GPS interactions from database
+      const allEncounters = [...localStorageEncounters, ...gpsInteractions];
+      console.log('📊 Final encounter data for heat map:');
+      console.log(`   - localStorage encounters: ${localStorageEncounters.length}`);
+      console.log(`   - Supabase GPS interactions: ${gpsInteractions.length}`);
+      console.log(`   - Total encounters: ${allEncounters.length}`);
+      
+      if (allEncounters.length > 0) {
+        console.log('📅 Encounter date range:');
+        const dates = allEncounters.map(e => e.timestamp);
+        const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
+        const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
+        console.log(`   - Earliest: ${minDate.toISOString()}`);
+        console.log(`   - Latest: ${maxDate.toISOString()}`);
+      }
+      
+      setEncounters(allEncounters);
     };
 
     loadEncounters();
@@ -181,19 +260,37 @@ const VistaHeatMap: React.FC = () => {
 
   // Filter encounters based on date range
   useEffect(() => {
+    console.log('🔍 Filtering encounters...');
+    console.log(`   - Total encounters: ${encounters.length}`);
+    console.log(`   - Date range: ${dateRange.startDate} to ${dateRange.endDate}`);
+    
     let filtered = encounters;
-
-    if (dateRange.startDate) {
-      const startDate = parseISO(dateRange.startDate);
-      filtered = filtered.filter(encounter => isAfter(encounter.timestamp, startDate) || encounter.timestamp.toDateString() === startDate.toDateString());
+    
+    if (dateRange.startDate || dateRange.endDate) {
+      filtered = encounters.filter(encounter => {
+        const encounterDate = new Date(encounter.timestamp);
+        
+        if (dateRange.startDate) {
+          const startDate = new Date(dateRange.startDate);
+          startDate.setHours(0, 0, 0, 0);
+          if (encounterDate < startDate) return false;
+        }
+        
+        if (dateRange.endDate) {
+          const endDate = new Date(dateRange.endDate);
+          endDate.setHours(23, 59, 59, 999);
+          if (encounterDate > endDate) return false;
+        }
+        
+        return true;
+      });
+      console.log(`✅ Filtered encounters: ${filtered.length} of ${encounters.length} encounters`);
+    } else {
+      console.log('ℹ️ No date filter applied, showing all encounters');
     }
-
-    if (dateRange.endDate) {
-      const endDate = parseISO(dateRange.endDate);
-      filtered = filtered.filter(encounter => isBefore(encounter.timestamp, endDate) || encounter.timestamp.toDateString() === endDate.toDateString());
-    }
-
+    
     setFilteredEncounters(filtered);
+    console.log(`📍 Final display: ${filtered.length} encounters`);
   }, [encounters, dateRange]);
 
   const handleDateRangeChange = (field: 'startDate' | 'endDate', value: string) => {
@@ -286,13 +383,9 @@ const VistaHeatMap: React.FC = () => {
               Clear Filters
             </Button>
           </Box>
-          {(dateRange.startDate || dateRange.endDate) && (
-            <Alert severity="info" sx={{ mt: 2 }}>
-              Showing {filteredEncounters.length} of {encounters.length} encounters
-              {dateRange.startDate && ` from ${format(parseISO(dateRange.startDate), 'MMM dd, yyyy')}`}
-              {dateRange.endDate && ` to ${format(parseISO(dateRange.endDate), 'MMM dd, yyyy')}`}
-            </Alert>
-          )}
+          <Alert severity="info" sx={{ mt: 2 }}>
+            Showing {filteredEncounters.length} encounters (all data)
+          </Alert>
         </AccordionDetails>
       </Accordion>
 
