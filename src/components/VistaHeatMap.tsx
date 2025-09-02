@@ -1,0 +1,570 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { MapContainer, TileLayer, useMap, Polygon, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import 'leaflet.heat';
+import { Box, Paper, Typography, Fab, Dialog, DialogTitle, DialogContent, TextField, Button, DialogActions, Chip, FormControlLabel, Checkbox, Alert, Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import { styled } from '@mui/material/styles';
+import { format, isAfter, isBefore, parseISO } from 'date-fns';
+
+declare module 'leaflet' {
+  function heatLayer(latlngs: number[][], options?: any): any;
+}
+
+interface EncounterData {
+  id: string;
+  lat: number;
+  lng: number;
+  timestamp: Date;
+  notes: string;
+  individualCount: number;
+  services: string[];
+}
+
+const MapWrapper = styled(Box)(({ theme }) => ({
+  height: '70vh',
+  width: '100%',
+  '& .leaflet-container': {
+    height: '100%',
+    width: '100%',
+  },
+}));
+
+const HeatLayer: React.FC<{ encounters: EncounterData[] }> = ({ encounters }) => {
+  const map = useMap();
+  const heatLayerRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (heatLayerRef.current) {
+      map.removeLayer(heatLayerRef.current);
+    }
+
+    const heatData = encounters.map(encounter => [
+      encounter.lat,
+      encounter.lng,
+      encounter.individualCount * 0.8
+    ]);
+
+    if (heatData.length > 0) {
+      heatLayerRef.current = L.heatLayer(heatData, {
+        radius: 25,
+        blur: 15,
+        maxZoom: 17,
+        gradient: {
+          0.4: 'blue',
+          0.6: 'cyan',
+          0.7: 'lime',
+          0.8: 'yellow',
+          1.0: 'red'
+        }
+      }).addTo(map);
+    }
+
+    return () => {
+      if (heatLayerRef.current) {
+        map.removeLayer(heatLayerRef.current);
+      }
+    };
+  }, [map, encounters]);
+
+  return null;
+};
+
+// ERF3 boundary coordinates
+const erf3Points = [
+  { name: 'Emerald Dr & Vista Village Dr', lat: 33.2015, lng: -117.248 },
+  { name: 'Vista Village Dr & Civic Center Dr', lat: 33.1995, lng: -117.242 },
+  { name: 'Civic Center Dr & Mar Vista Dr', lat: 33.1965, lng: -117.238 },
+  { name: 'Mar Vista Dr & Melrose Dr', lat: 33.195, lng: -117.236 },
+  { name: 'Melrose Dr & Sycamore Ave & Hwy 78', lat: 33.192, lng: -117.24 },
+  { name: 'Hwy 78 & Emerald Dr', lat: 33.198, lng: -117.2495 },
+];
+
+// Create polygon coordinates (closing the shape by returning to first point)
+const erf3Polygon: [number, number][] = [
+  ...erf3Points.map(point => [point.lat, point.lng] as [number, number]),
+  [erf3Points[0].lat, erf3Points[0].lng] // Close the polygon
+];
+
+const VistaHeatMap: React.FC = () => {
+  const [encounters, setEncounters] = useState<EncounterData[]>([]);
+  const [filteredEncounters, setFilteredEncounters] = useState<EncounterData[]>([]);
+  const [dateRange, setDateRange] = useState({
+    startDate: '',
+    endDate: ''
+  });
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Load encounters from localStorage on component mount
+  useEffect(() => {
+    const loadEncounters = () => {
+      // Load sample data
+      const sampleEncounters: EncounterData[] = [
+        {
+          id: '1',
+          lat: 33.2002,
+          lng: -117.2425,
+          timestamp: new Date(),
+          notes: 'Family of 3 near shopping center',
+          individualCount: 3,
+          services: ['food', 'clothing']
+        },
+        {
+          id: '2',
+          lat: 33.1934,
+          lng: -117.2447,
+          timestamp: new Date(),
+          notes: 'Individual under bridge',
+          individualCount: 1,
+          services: ['medical']
+        },
+        {
+          id: '3',
+          lat: 33.1995,
+          lng: -117.242,
+          timestamp: new Date(),
+          notes: 'ERF3 Contact - Vista Village Dr & Civic Center Dr',
+          individualCount: 2,
+          services: ['food', 'clothing']
+        },
+        {
+          id: '4',
+          lat: 33.195,
+          lng: -117.236,
+          timestamp: new Date(),
+          notes: 'ERF3 Contact - Mar Vista Dr & Melrose Dr',
+          individualCount: 1,
+          services: ['medical', 'housing']
+        },
+      ];
+
+      // Load client intake encounters from localStorage
+      const storedEncounters = localStorage.getItem('clientEncounters');
+      console.log('Loading encounters from localStorage:', storedEncounters);
+      
+      const intakeEncounters: EncounterData[] = storedEncounters 
+        ? JSON.parse(storedEncounters).map((encounter: any) => ({
+            ...encounter,
+            timestamp: new Date(encounter.timestamp)
+          }))
+        : [];
+
+      console.log('Parsed intake encounters:', intakeEncounters);
+
+      // Combine sample data with intake data
+      const combinedEncounters = [...sampleEncounters, ...intakeEncounters];
+      console.log('Combined encounters for heat map:', combinedEncounters);
+      setEncounters(combinedEncounters);
+      setFilteredEncounters(combinedEncounters); // Initially show all
+    };
+
+    loadEncounters();
+
+    // Listen for localStorage changes to update map in real-time
+    const handleStorageChange = () => {
+      loadEncounters();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also listen for custom event when intake is submitted in same window
+    window.addEventListener('clientIntakeSubmitted', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('clientIntakeSubmitted', handleStorageChange);
+    };
+  }, []);
+
+  // Filter encounters based on date range
+  useEffect(() => {
+    let filtered = encounters;
+
+    if (dateRange.startDate) {
+      const startDate = parseISO(dateRange.startDate);
+      filtered = filtered.filter(encounter => isAfter(encounter.timestamp, startDate) || encounter.timestamp.toDateString() === startDate.toDateString());
+    }
+
+    if (dateRange.endDate) {
+      const endDate = parseISO(dateRange.endDate);
+      filtered = filtered.filter(encounter => isBefore(encounter.timestamp, endDate) || encounter.timestamp.toDateString() === endDate.toDateString());
+    }
+
+    setFilteredEncounters(filtered);
+  }, [encounters, dateRange]);
+
+  const handleDateRangeChange = (field: 'startDate' | 'endDate', value: string) => {
+    setDateRange(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const clearFilters = () => {
+    setDateRange({ startDate: '', endDate: '' });
+  };
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [showErf3, setShowErf3] = useState(true);
+  const [showPins, setShowPins] = useState(true);
+  const [showHeatMap, setShowHeatMap] = useState(true);
+  const [newEncounter, setNewEncounter] = useState({
+    lat: 33.2002,
+    lng: -117.2425,
+    notes: '',
+    individualCount: 1,
+    services: [] as string[]
+  });
+
+  const handleAddEncounter = () => {
+    const encounter: EncounterData = {
+      id: Date.now().toString(),
+      ...newEncounter,
+      timestamp: new Date()
+    };
+    setEncounters([...encounters, encounter]);
+    setDialogOpen(false);
+    setNewEncounter({
+      lat: 33.2002,
+      lng: -117.2425,
+      notes: '',
+      individualCount: 1,
+      services: []
+    });
+  };
+
+  const serviceOptions = ['food', 'clothing', 'medical', 'housing', 'mental-health', 'transportation'];
+
+  const getEncounterColor = (encounter: EncounterData): string => {
+    // Color based on primary service or encounter type
+    if (encounter.notes.includes('ERF3')) return '#2196F3'; // Blue for ERF3
+    if (encounter.services.includes('medical')) return '#f44336'; // Red for medical
+    if (encounter.services.includes('housing')) return '#4caf50'; // Green for housing
+    if (encounter.services.includes('mental-health')) return '#9c27b0'; // Purple for mental health
+    if (encounter.services.includes('food')) return '#ff9800'; // Orange for food
+    return '#607d8b'; // Default gray
+  };
+
+  return (
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h4" gutterBottom>
+        Vista, CA Homeless Outreach Heat Map
+      </Typography>
+      
+      {/* Date Range Filter */}
+      <Accordion sx={{ mb: 2 }}>
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <FilterListIcon />
+            <Typography variant="subtitle2">
+              Date Range Filter {(dateRange.startDate || dateRange.endDate) && `(${filteredEncounters.length} encounters)`}
+            </Typography>
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+            <TextField
+              label="Start Date"
+              type="date"
+              value={dateRange.startDate}
+              onChange={(e) => handleDateRangeChange('startDate', e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              size="small"
+            />
+            <TextField
+              label="End Date"
+              type="date"
+              value={dateRange.endDate}
+              onChange={(e) => handleDateRangeChange('endDate', e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              size="small"
+            />
+            <Button onClick={clearFilters} variant="outlined" size="small">
+              Clear Filters
+            </Button>
+          </Box>
+          {(dateRange.startDate || dateRange.endDate) && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              Showing {filteredEncounters.length} of {encounters.length} encounters
+              {dateRange.startDate && ` from ${format(parseISO(dateRange.startDate), 'MMM dd, yyyy')}`}
+              {dateRange.endDate && ` to ${format(parseISO(dateRange.endDate), 'MMM dd, yyyy')}`}
+            </Alert>
+          )}
+        </AccordionDetails>
+      </Accordion>
+
+      {/* Pin Legend */}
+      {showPins && (
+        <Accordion sx={{ mb: 2 }}>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="subtitle2">Pin Color Legend</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <Chip icon={<Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#2196F3' }} />} label="ERF3 Encounters" size="small" />
+              <Chip icon={<Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#f44336' }} />} label="Medical Services" size="small" />
+              <Chip icon={<Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#4caf50' }} />} label="Housing Services" size="small" />
+              <Chip icon={<Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#9c27b0' }} />} label="Mental Health" size="small" />
+              <Chip icon={<Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#ff9800' }} />} label="Food Services" size="small" />
+              <Chip icon={<Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#607d8b' }} />} label="Other Services" size="small" />
+            </Box>
+            <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
+              Numbers inside pins show individual count. Click pins for details.
+            </Typography>
+          </AccordionDetails>
+        </Accordion>
+      )}
+
+      <Box sx={{ mb: 2, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Typography variant="body2" color="text.secondary">
+          Showing: {filteredEncounters.length} encounters
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Total Individuals: {filteredEncounters.reduce((sum, e) => sum + e.individualCount, 0)}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          ERF3 Contacts: {filteredEncounters.filter(e => e.notes.includes('ERF3')).length}
+        </Typography>
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={showHeatMap}
+              onChange={(e) => setShowHeatMap(e.target.checked)}
+              size="small"
+            />
+          }
+          label="Show Heat Map"
+        />
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={showPins}
+              onChange={(e) => setShowPins(e.target.checked)}
+              size="small"
+            />
+          }
+          label="Show Pin Markers"
+        />
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={showErf3}
+              onChange={(e) => setShowErf3(e.target.checked)}
+              size="small"
+            />
+          }
+          label="Show ERF3 Overlay"
+        />
+      </Box>
+
+      <Paper elevation={3}>
+        <MapWrapper>
+          <MapContainer
+            center={[33.2002, -117.2425]}
+            zoom={13}
+            style={{ height: '100%', width: '100%' }}
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            
+            {/* Heat Layer */}
+            {showHeatMap && <HeatLayer encounters={filteredEncounters} />}
+            
+            {/* Individual Pin Markers */}
+            {showPins && filteredEncounters.map((encounter, index) => (
+              <Marker
+                key={encounter.id}
+                position={[encounter.lat, encounter.lng]}
+                icon={L.divIcon({
+                  className: 'encounter-marker',
+                  html: `<div style="
+                    background-color: ${getEncounterColor(encounter)};
+                    color: white;
+                    border-radius: 50%;
+                    width: 20px;
+                    height: 20px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 10px;
+                    font-weight: bold;
+                    border: 2px solid white;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                  ">${encounter.individualCount}</div>`,
+                  iconSize: [20, 20],
+                  iconAnchor: [10, 10]
+                })}
+              >
+                <Popup>
+                  <div>
+                    <strong>Encounter #{index + 1}</strong>
+                    <br />
+                    <strong>Date:</strong> {format(encounter.timestamp, 'MMM dd, yyyy h:mm a')}
+                    <br />
+                    <strong>Individuals:</strong> {encounter.individualCount}
+                    <br />
+                    <strong>Services:</strong> {encounter.services.join(', ')}
+                    <br />
+                    <strong>Notes:</strong> {encounter.notes}
+                    <br />
+                    <small>
+                      Location: {encounter.lat.toFixed(4)}, {encounter.lng.toFixed(4)}
+                    </small>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+            
+            {showErf3 && (
+              <>
+                {/* ERF3 Boundary Polygon */}
+                <Polygon
+                  positions={erf3Polygon}
+                  pathOptions={{
+                    color: '#2196F3',
+                    weight: 3,
+                    opacity: 0.8,
+                    fillColor: '#2196F3',
+                    fillOpacity: 0.1,
+                    dashArray: '10, 10'
+                  }}
+                >
+                  <Popup>
+                    <div>
+                      <strong>ERF3 Boundary</strong>
+                      <br />
+                      Enhanced Response Focus Area 3
+                      <br />
+                      Active Contacts: {encounters.filter(e => e.notes.includes('ERF3')).length}
+                    </div>
+                  </Popup>
+                </Polygon>
+
+                {/* ERF3 Boundary Points */}
+                {erf3Points.map((point, index) => (
+                  <Marker
+                    key={index}
+                    position={[point.lat, point.lng]}
+                    icon={L.divIcon({
+                      className: 'erf3-marker',
+                      html: `<div style="
+                        background-color: #2196F3;
+                        color: white;
+                        border-radius: 50%;
+                        width: 24px;
+                        height: 24px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 12px;
+                        font-weight: bold;
+                        border: 2px solid white;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                      ">${index + 1}</div>`,
+                      iconSize: [24, 24],
+                      iconAnchor: [12, 12]
+                    })}
+                  >
+                    <Popup>
+                      <div>
+                        <strong>ERF3 Point {index + 1}</strong>
+                        <br />
+                        {point.name}
+                        <br />
+                        <small>
+                          {point.lat.toFixed(4)}, {point.lng.toFixed(4)}
+                        </small>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+              </>
+            )}
+          </MapContainer>
+        </MapWrapper>
+      </Paper>
+
+      <Fab
+        color="primary"
+        aria-label="add encounter"
+        sx={{ position: 'fixed', bottom: 16, right: 16 }}
+        onClick={() => setDialogOpen(true)}
+      >
+        <AddIcon />
+      </Fab>
+
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Log New Encounter</DialogTitle>
+        <DialogContent>
+          <TextField
+            fullWidth
+            label="Latitude"
+            type="number"
+            value={newEncounter.lat}
+            onChange={(e) => setNewEncounter({...newEncounter, lat: parseFloat(e.target.value)})}
+            margin="normal"
+            inputProps={{ step: 0.0001 }}
+          />
+          <TextField
+            fullWidth
+            label="Longitude"
+            type="number"
+            value={newEncounter.lng}
+            onChange={(e) => setNewEncounter({...newEncounter, lng: parseFloat(e.target.value)})}
+            margin="normal"
+            inputProps={{ step: 0.0001 }}
+          />
+          <TextField
+            fullWidth
+            label="Number of Individuals"
+            type="number"
+            value={newEncounter.individualCount}
+            onChange={(e) => setNewEncounter({...newEncounter, individualCount: parseInt(e.target.value)})}
+            margin="normal"
+          />
+          <TextField
+            fullWidth
+            label="Notes"
+            multiline
+            rows={3}
+            value={newEncounter.notes}
+            onChange={(e) => setNewEncounter({...newEncounter, notes: e.target.value})}
+            margin="normal"
+          />
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              Services Provided:
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              {serviceOptions.map((service) => (
+                <Chip
+                  key={service}
+                  label={service}
+                  clickable
+                  color={newEncounter.services.includes(service) ? 'primary' : 'default'}
+                  onClick={() => {
+                    const services = newEncounter.services.includes(service)
+                      ? newEncounter.services.filter(s => s !== service)
+                      : [...newEncounter.services, service];
+                    setNewEncounter({...newEncounter, services});
+                  }}
+                />
+              ))}
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleAddEncounter} variant="contained">Add Encounter</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default VistaHeatMap;
