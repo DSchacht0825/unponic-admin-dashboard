@@ -32,6 +32,7 @@ import {
   PersonAdd,
   ManageAccounts,
   Upload,
+  MergeType,
 } from '@mui/icons-material';
 import UserManagement from './UserManagement';
 import ReportsAndAnalytics from './ReportsAndAnalytics';
@@ -40,6 +41,7 @@ import ClientProfileForm from './ClientProfileForm';
 import ClientManagement from './ClientManagement';
 import ClientImporter from './ClientImporter';
 import DataMigration from './DataMigration';
+import DuplicateManager from './DuplicateManager';
 
 const drawerWidth = 240;
 
@@ -61,6 +63,7 @@ const AdminDashboard: React.FC = () => {
     { text: 'Heat Map', icon: <Map />, component: VistaHeatMap },
     { text: 'Client Management', icon: <ManageAccounts />, component: ClientManagement },
     { text: 'Client Intake', icon: <PersonAdd />, component: ClientProfileForm },
+    { text: 'Duplicate Detection', icon: <MergeType />, component: DuplicateManager },
     { text: 'Import Clients', icon: <Upload />, component: ClientImporter },
     { text: 'Data Migration', icon: <Dashboard />, component: DataMigration },
     { text: 'User Management', icon: <People />, component: UserManagement },

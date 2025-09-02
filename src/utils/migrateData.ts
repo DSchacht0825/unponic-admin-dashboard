@@ -6,24 +6,42 @@ export const migrateExistingData = async () => {
     console.log('Starting data migration...')
     
     // Transform the JSON data to match our database schema
-    const transformedData = clientsData.map(client => ({
-      first_name: client['First Name'] || '',
-      middle: client['Middle'] || '',
-      last_name: client['Last Name'] || '',
-      aka: client['AKA'] || '',
-      gender: client['Gender'] || '',
-      ethnicity: client['Ethnicity'] || '',
-      age: client['Age'] || '',
-      height: client['Height'] || '',
-      weight: client['Weight'] || '',
-      hair: client['Hair'] || '',
-      eyes: client['Eyes'] || '',
-      description: client['Description'] || '',
-      notes: client['Notes'] || '',
-      last_contact: client['Last Contact'] ? new Date(client['Last Contact']).toISOString().split('T')[0] : null,
-      contacts: parseInt(client['Contacts']) || 0,
-      date_created: client['Date Created'] ? new Date(client['Date Created']).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-    }))
+    const transformedData = clientsData.map(client => {
+      // Helper function to safely parse dates
+      const parseDate = (dateStr: any) => {
+        if (!dateStr || dateStr === 'Never' || dateStr === '') {
+          return null;
+        }
+        try {
+          const date = new Date(dateStr);
+          if (isNaN(date.getTime())) {
+            return null;
+          }
+          return date.toISOString().split('T')[0];
+        } catch {
+          return null;
+        }
+      };
+
+      return {
+        first_name: client['First Name'] || '',
+        middle: client['Middle'] || '',
+        last_name: client['Last Name'] || '',
+        aka: client['AKA'] || '',
+        gender: client['Gender'] || '',
+        ethnicity: client['Ethnicity'] || '',
+        age: client['Age'] || '',
+        height: client['Height'] || '',
+        weight: client['Weight'] || '',
+        hair: client['Hair'] || '',
+        eyes: client['Eyes'] || '',
+        description: client['Description'] || '',
+        notes: client['Notes'] || '',
+        last_contact: parseDate(client['Last Contact']),
+        contacts: parseInt(client['Contacts']) || 0,
+        date_created: parseDate(client['Date Created']) || new Date().toISOString().split('T')[0]
+      };
+    })
 
     // Insert data in batches to avoid timeout
     const batchSize = 50
