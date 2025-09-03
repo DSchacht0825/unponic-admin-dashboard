@@ -10,7 +10,12 @@ import {
   MenuItem,
   Stack,
   CircularProgress,
-  Snackbar
+  Snackbar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Chip
 } from '@mui/material';
 import {
   LocationOn as LocationIcon,
@@ -57,6 +62,8 @@ const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState<any[]>([]);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
 
   useEffect(() => {
     getCurrentLocation();
@@ -94,22 +101,77 @@ const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
   };
 
   const handleInputChange = (field: keyof Client) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = event.target.value;
     setFormData(prev => ({
       ...prev,
-      [field]: event.target.value
+      [field]: newValue
     }));
+
+    // Check for duplicates when first or last name changes
+    if (field === 'first_name' || field === 'last_name') {
+      const updatedData = { ...formData, [field]: newValue };
+      if (updatedData.first_name && updatedData.last_name) {
+        checkForDuplicates(updatedData.first_name, updatedData.last_name);
+      }
+    }
+  };
+
+  const checkForDuplicates = async (firstName: string, lastName: string) => {
+    if (!firstName || !lastName) return;
+
+    try {
+      const fullName = `${firstName} ${lastName}`.toLowerCase();
+      
+      const { data: exactMatches } = await supabase
+        .from('clients')
+        .select('*')
+        .or(`first_name.ilike.${firstName},last_name.ilike.${lastName}`)
+        .limit(10);
+
+      const { data: similarMatches } = await supabase
+        .from('clients')
+        .select('*')
+        .or(`first_name.ilike.%${firstName}%,last_name.ilike.%${lastName}%,aka.ilike.%${firstName}%,aka.ilike.%${lastName}%`)
+        .limit(10);
+
+      const allMatches = [...(exactMatches || []), ...(similarMatches || [])];
+      const uniqueMatches = allMatches.filter((match, index, self) => 
+        index === self.findIndex(m => m.id === match.id)
+      );
+
+      if (uniqueMatches.length > 0) {
+        setDuplicateWarning(uniqueMatches);
+      } else {
+        setDuplicateWarning([]);
+      }
+    } catch (error) {
+      console.error('Error checking duplicates:', error);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate required fields
+    if (!formData.first_name || !formData.last_name) {
+      setError('First name and last name are required');
+      return;
+    }
+
+    // Show duplicate warning dialog if duplicates found
+    if (duplicateWarning.length > 0) {
+      setShowDuplicateDialog(true);
+      return;
+    }
+
+    await saveClient();
+  };
+
+  const saveClient = async () => {
     setSaving(true);
     setError('');
 
     try {
-      // Validate required fields
-      if (!formData.first_name || !formData.last_name) {
-        throw new Error('First name and last name are required');
-      }
 
       const clientData: Partial<Client> = {
         ...formData,
@@ -264,6 +326,34 @@ const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
           </Box>
         </CardContent>
       </Card>
+
+      {/* Duplicate Warning */}
+      {duplicateWarning.length > 0 && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            ⚠️ Possible duplicate clients found ({duplicateWarning.length})
+          </Typography>
+          <Box sx={{ mt: 1 }}>
+            {duplicateWarning.slice(0, 3).map((client, index) => (
+              <Chip
+                key={index}
+                label={`${client.first_name} ${client.last_name}${client.aka ? ` (${client.aka})` : ''}`}
+                size="small"
+                color="warning"
+                sx={{ mr: 1, mb: 1 }}
+              />
+            ))}
+            {duplicateWarning.length > 3 && (
+              <Typography variant="caption" color="text.secondary">
+                ...and {duplicateWarning.length - 3} more
+              </Typography>
+            )}
+          </Box>
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            Please verify this is a new client before proceeding.
+          </Typography>
+        </Alert>
+      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -447,6 +537,67 @@ const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
           Client added successfully!
         </Alert>
       </Snackbar>
+
+      {/* Duplicate Confirmation Dialog */}
+      <Dialog
+        open={showDuplicateDialog}
+        onClose={() => setShowDuplicateDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          ⚠️ Possible Duplicate Client
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" gutterBottom>
+            Found {duplicateWarning.length} similar client(s). Please review:
+          </Typography>
+          
+          <Box sx={{ mt: 2, maxHeight: 300, overflow: 'auto' }}>
+            {duplicateWarning.map((client, index) => (
+              <Card key={index} sx={{ mb: 2, bgcolor: 'warning.light' }}>
+                <CardContent sx={{ py: 2 }}>
+                  <Typography variant="subtitle2" color="warning.dark">
+                    {client.first_name} {client.middle} {client.last_name}
+                  </Typography>
+                  {client.aka && (
+                    <Typography variant="body2" color="text.secondary">
+                      AKA: {client.aka}
+                    </Typography>
+                  )}
+                  <Typography variant="caption" color="text.secondary">
+                    Age: {client.age} • Gender: {client.gender} • {client.contacts} contacts
+                  </Typography>
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+            Are you sure you want to create a new client record for{' '}
+            <strong>{formData.first_name} {formData.last_name}</strong>?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setShowDuplicateDialog(false)}
+            color="primary"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              setShowDuplicateDialog(false);
+              setDuplicateWarning([]);
+              saveClient();
+            }}
+            variant="contained"
+            color="warning"
+          >
+            Create New Client Anyway
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
