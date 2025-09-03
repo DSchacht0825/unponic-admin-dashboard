@@ -18,7 +18,6 @@ import {
   Avatar,
   Card,
   CardContent,
-  CardActions,
   Alert,
   CircularProgress,
 } from '@mui/material';
@@ -197,6 +196,7 @@ const UserManagement: React.FC = () => {
       email: user.email,
       role: user.role,
       department: user.department,
+      password: '', // Empty for editing existing users
     });
     setDialogOpen(true);
   };
@@ -206,7 +206,7 @@ const UserManagement: React.FC = () => {
     
     setUsers(users.map(user => 
       user.id === editingUser.id 
-        ? { ...user, ...newUser }
+        ? { ...user, name: newUser.name, email: newUser.email, role: newUser.role, department: newUser.department }
         : user
     ));
     setDialogOpen(false);
