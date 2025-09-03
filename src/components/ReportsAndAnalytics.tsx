@@ -507,12 +507,24 @@ const ReportsAndAnalytics: React.FC = () => {
 
     const trends = Object.entries(trendsMap)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, stats]) => ({
-        date: format(parseISO(date), 'MMM dd'),
-        encounters: stats.encounters,
-        individuals: stats.individuals.size,
-        services: stats.services
-      }));
+      .map(([date, stats]) => {
+        let formattedDate;
+        try {
+          // Safely parse and format the date
+          const parsedDate = parseISO(date);
+          formattedDate = format(parsedDate, 'MMM dd');
+        } catch (e) {
+          console.error('Error formatting date:', date, e);
+          formattedDate = date; // Use raw date as fallback
+        }
+        
+        return {
+          date: formattedDate,
+          encounters: stats.encounters,
+          individuals: stats.individuals.size,
+          services: stats.services
+        };
+      });
 
     // Deep clone to ensure immutability and prevent readonly errors
     const immutableTrends = JSON.parse(JSON.stringify(trends));
@@ -835,9 +847,14 @@ const ReportsAndAnalytics: React.FC = () => {
       let month;
       try {
         const date = new Date(encounterDate);
+        // Check if date is valid before formatting
+        if (isNaN(date.getTime())) {
+          console.warn('Invalid date in monthly comparison:', encounterDate);
+          return;
+        }
         month = format(date, 'MMM yyyy');
       } catch (e) {
-        console.warn('Invalid date in monthly comparison:', encounterDate);
+        console.warn('Error formatting date in monthly comparison:', encounterDate, e);
         return;
       }
       
