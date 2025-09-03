@@ -140,10 +140,19 @@ const erf3Polygon: [number, number][] = [
 const VistaHeatMap: React.FC = () => {
   const [encounters, setEncounters] = useState<EncounterData[]>([]);
   const [filteredEncounters, setFilteredEncounters] = useState<EncounterData[]>([]);
-  const [dateRange, setDateRange] = useState({
-    startDate: '',
-    endDate: ''
-  });
+  // Default to last 30 days
+  const getDefaultDateRange = () => {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 30);
+    
+    return {
+      startDate: startDate.toISOString().split('T')[0],
+      endDate: endDate.toISOString().split('T')[0]
+    };
+  };
+
+  const [dateRange, setDateRange] = useState(getDefaultDateRange());
 
 
   // Load encounters from localStorage on component mount
@@ -231,7 +240,10 @@ const VistaHeatMap: React.FC = () => {
       
       try {
         console.log('Attempting to load GPS interactions from Supabase...');
-        const { data: interactions, error } = await supabase
+        console.log(`Date range: ${dateRange.startDate} to ${dateRange.endDate}`);
+        
+        // Build query with date filtering
+        let query = supabase
           .from('client_interactions')
           .select(`
             id,
@@ -245,6 +257,16 @@ const VistaHeatMap: React.FC = () => {
           `)
           .not('location_lat', 'is', null)
           .not('location_lng', 'is', null);
+        
+        // Apply date filters at the database level for performance
+        if (dateRange.startDate) {
+          query = query.gte('interaction_date', `${dateRange.startDate}T00:00:00`);
+        }
+        if (dateRange.endDate) {
+          query = query.lte('interaction_date', `${dateRange.endDate}T23:59:59`);
+        }
+        
+        const { data: interactions, error } = await query;
 
         console.log('Supabase response:', { interactions, error });
 
@@ -303,7 +325,7 @@ const VistaHeatMap: React.FC = () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('clientIntakeSubmitted', handleStorageChange);
     };
-  }, []);
+  }, [dateRange.startDate, dateRange.endDate]); // Re-fetch data when date range changes
 
   // Filter encounters based on date range
   useEffect(() => {
@@ -348,7 +370,7 @@ const VistaHeatMap: React.FC = () => {
   };
 
   const clearFilters = () => {
-    setDateRange({ startDate: '', endDate: '' });
+    setDateRange(getDefaultDateRange());
   };
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -428,11 +450,17 @@ const VistaHeatMap: React.FC = () => {
               size="small"
             />
             <Button onClick={clearFilters} variant="outlined" size="small">
-              Clear Filters
+              Reset to Last 30 Days
             </Button>
           </Box>
           <Alert severity="info" sx={{ mt: 2 }}>
-            Showing {filteredEncounters.length} encounters (all data)
+            Showing {filteredEncounters.length} interactions 
+            {dateRange.startDate && dateRange.endDate ? 
+              ` from ${new Date(dateRange.startDate).toLocaleDateString()} to ${new Date(dateRange.endDate).toLocaleDateString()}` : 
+              dateRange.startDate ? ` from ${new Date(dateRange.startDate).toLocaleDateString()}` :
+              dateRange.endDate ? ` up to ${new Date(dateRange.endDate).toLocaleDateString()}` :
+              ' (all time)'
+            }
           </Alert>
         </AccordionDetails>
       </Accordion>
