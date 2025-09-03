@@ -19,6 +19,8 @@ import {
   Card,
   CardContent,
   CardActions,
+  Alert,
+  CircularProgress,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -27,6 +29,7 @@ import {
   PersonAdd as PersonAddIcon,
 } from '@mui/icons-material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
+import { supabase } from '../lib/supabase';
 
 interface User {
   id: string;
@@ -79,11 +82,15 @@ const UserManagement: React.FC = () => {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [newUser, setNewUser] = useState({
     name: '',
     email: '',
     role: 'volunteer' as User['role'],
     department: '',
+    password: '',
   });
 
   const columns: GridColDef[] = [
@@ -142,18 +149,45 @@ const UserManagement: React.FC = () => {
     },
   ];
 
-  const handleAddUser = () => {
-    const user: User = {
-      id: Date.now().toString(),
-      ...newUser,
-      joinDate: new Date(),
-      status: 'active',
-      encountersLogged: 0,
-      lastActive: new Date(),
-    };
-    setUsers([...users, user]);
-    setDialogOpen(false);
-    setNewUser({ name: '', email: '', role: 'volunteer', department: '' });
+  const handleAddUser = async () => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      // Create user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: newUser.email,
+        password: newUser.password,
+        email_confirm: true,
+        user_metadata: {
+          name: newUser.name,
+          role: newUser.role,
+          department: newUser.department,
+        }
+      });
+
+      if (authError) throw authError;
+
+      const user: User = {
+        id: authData.user?.id || Date.now().toString(),
+        ...newUser,
+        joinDate: new Date(),
+        status: 'active',
+        encountersLogged: 0,
+        lastActive: new Date(),
+      };
+      
+      setUsers([...users, user]);
+      setSuccess(`User ${newUser.name} created successfully!`);
+      setDialogOpen(false);
+      setNewUser({ name: '', email: '', role: 'volunteer', department: '', password: '' });
+      
+    } catch (error: any) {
+      setError(`Failed to create user: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleEditUser = (user: User) => {
@@ -177,7 +211,7 @@ const UserManagement: React.FC = () => {
     ));
     setDialogOpen(false);
     setEditingUser(null);
-    setNewUser({ name: '', email: '', role: 'volunteer', department: '' });
+    setNewUser({ name: '', email: '', role: 'volunteer', department: '', password: '' });
   };
 
   const handleDeleteUser = (userId: string) => {
@@ -273,6 +307,16 @@ const UserManagement: React.FC = () => {
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>{editingUser ? 'Edit User' : 'Add New User'}</DialogTitle>
         <DialogContent>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+          {success && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              {success}
+            </Alert>
+          )}
           <TextField
             fullWidth
             label="Full Name"
@@ -287,6 +331,15 @@ const UserManagement: React.FC = () => {
             value={newUser.email}
             onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
             margin="normal"
+          />
+          <TextField
+            fullWidth
+            label="Password"
+            type="password"
+            value={newUser.password}
+            onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+            margin="normal"
+            helperText={editingUser ? "Leave blank to keep current password" : "Minimum 6 characters"}
           />
           <FormControl fullWidth margin="normal">
             <InputLabel>Role</InputLabel>
@@ -320,8 +373,10 @@ const UserManagement: React.FC = () => {
           <Button
             onClick={editingUser ? handleUpdateUser : handleAddUser}
             variant="contained"
+            disabled={loading || !newUser.email || !newUser.name || (!editingUser && !newUser.password)}
+            startIcon={loading && <CircularProgress size={20} />}
           >
-            {editingUser ? 'Update' : 'Add'} User
+            {loading ? 'Creating...' : (editingUser ? 'Update' : 'Add')} User
           </Button>
         </DialogActions>
       </Dialog>
