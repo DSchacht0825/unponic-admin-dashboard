@@ -252,12 +252,11 @@ const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
         const interactionData = {
           client_id: data.id,
           worker_name: user.email?.split('@')[0] || 'Unknown Worker',
-          interaction_type: 'Initial Intake',
-          notes: `Client intake completed. ${formData.notes ? `Notes: ${formData.notes}` : ''}`.trim(),
+          interaction_type: 'contact',  // Using valid enum value
+          notes: `Initial client intake completed. ${formData.notes ? `Notes: ${formData.notes}` : ''}`.trim(),
           location_lat: location.latitude,
           location_lng: location.longitude,
-          interaction_date: new Date().toISOString(),
-          created_at: new Date().toISOString()
+          interaction_date: new Date().toISOString()
         };
 
         await supabase

@@ -158,15 +158,13 @@ ${interaction.notes}
   };
 
   const interactionTypes = [
-    'Check-in',
-    'Service Provided', 
-    'Referral Given',
-    'Medical Assistance',
-    'Food/Water',
-    'Transportation',
-    'Housing Support',
-    'Mental Health',
-    'Other'
+    { value: 'contact', label: 'Check-in / Contact' },
+    { value: 'service', label: 'Service Provided' },
+    { value: 'referral', label: 'Referral Made' },
+    { value: 'follow_up', label: 'Follow-up' },
+    { value: 'assessment', label: 'Assessment' },
+    { value: 'transport', label: 'Transportation' },
+    { value: 'emergency', label: 'Emergency Response' }
   ];
 
   const getCurrentLocation = () => {
@@ -237,8 +235,7 @@ ${interaction.notes}
         notes: interactionForm.notes,
         location_lat: interactionForm.location?.latitude || 0,
         location_lng: interactionForm.location?.longitude || 0,
-        interaction_date: new Date().toISOString(),
-        created_at: new Date().toISOString()
+        interaction_date: new Date().toISOString()
       };
 
       const { error } = await supabase
@@ -593,8 +590,8 @@ ${interaction.notes}
             required
           >
             {interactionTypes.map((type) => (
-              <MenuItem key={type} value={type}>
-                {type}
+              <MenuItem key={type.value} value={type.value}>
+                {type.label}
               </MenuItem>
             ))}
           </TextField>
