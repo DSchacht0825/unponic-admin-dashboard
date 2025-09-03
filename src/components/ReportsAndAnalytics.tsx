@@ -399,11 +399,19 @@ const ReportsAndAnalytics: React.FC = () => {
     
     console.log(`📊 Encounters after date filtering: ${filteredEncounters.length}`);
 
-    // Group by date
+    // Group by date - CREATE NEW OBJECTS TO AVOID READONLY ERRORS
     const trendsMap: { [key: string]: { encounters: number; individuals: Set<string>; services: number } } = {};
     let sept2Count = 0;
     
-    filteredEncounters.forEach(encounter => {
+    // Process encounters and create new objects to avoid readonly property errors
+    const processedEncounters = filteredEncounters.map(encounter => {
+      return {
+        ...encounter, // Create a new object to avoid readonly issues
+        processed: true
+      };
+    });
+    
+    processedEncounters.forEach(encounter => {
       // Look for original encounter dates first, avoid import timestamps
       const encounterDate = encounter.encounter_date || encounter.service_date || encounter.original_date || encounter.date || 
                            // Only use created_at/interaction_date if they don't look like import timestamps
@@ -457,16 +465,23 @@ const ReportsAndAnalytics: React.FC = () => {
         return; // Skip encounters without dates instead of using fallback
       }
       
+      // Create new objects every time to avoid readonly issues
       if (!trendsMap[date]) {
-        trendsMap[date] = { encounters: 0, individuals: new Set(), services: 0 };
+        trendsMap[date] = { encounters: 0, individuals: new Set<string>(), services: 0 };
       }
       
-      trendsMap[date].encounters += 1;
-      trendsMap[date].individuals.add(encounter.client_id || encounter.id || encounter.client_name || encounter.name || 'unknown');
+      // Safely increment values
+      const currentStats = trendsMap[date];
+      currentStats.encounters = currentStats.encounters + 1;
       
+      // Safely add to set
+      const individualId = String(encounter.client_id || encounter.id || encounter.client_name || encounter.name || 'unknown');
+      currentStats.individuals.add(individualId);
+      
+      // Safely add services
       const services = encounter.services_provided || encounter.services || ['general'];
       const serviceArray = Array.isArray(services) ? services : [services];
-      trendsMap[date].services += serviceArray.length;
+      currentStats.services = currentStats.services + serviceArray.length;
     });
     
     const dailyBreakdown = Object.keys(trendsMap).sort().map(date => ({
@@ -721,18 +736,26 @@ const ReportsAndAnalytics: React.FC = () => {
       console.log('👷 Available worker fields:', workerFields);
     }
 
-    filteredEncounters.forEach(encounter => {
+    // Create new objects to avoid readonly issues
+    const processedFilteredEncounters = filteredEncounters.map(encounter => ({
+      ...encounter, // Create new object to avoid readonly issues
+      processed: true
+    }));
+    
+    processedFilteredEncounters.forEach(encounter => {
       const worker = encounter.worker_name || encounter.worker || encounter.staff_name || encounter.user_name || encounter.employee_name || encounter.name || encounter.staff || 'Unknown Worker';
       
       if (!userStats[worker]) {
         userStats[worker] = { encounters: 0, services: 0 };
       }
       
-      userStats[worker].encounters += 1;
+      // Safely update stats
+      const currentWorkerStats = userStats[worker];
+      currentWorkerStats.encounters = currentWorkerStats.encounters + 1;
       
       const services = encounter.services_provided || encounter.services || ['General'];
       const serviceArray = Array.isArray(services) ? services : [services];
-      userStats[worker].services += serviceArray.length;
+      currentWorkerStats.services = currentWorkerStats.services + serviceArray.length;
     });
 
     const productivity = Object.entries(userStats)
@@ -782,7 +805,13 @@ const ReportsAndAnalytics: React.FC = () => {
 
     const monthlyStats: { [key: string]: { encounters: number; individuals: Set<string>; services: number } } = {};
     
-    recentEncounters.forEach(encounter => {
+    // Create new objects to avoid readonly issues
+    const processedRecentEncounters = recentEncounters.map(encounter => ({
+      ...encounter, // Create new object to avoid readonly issues
+      processed: true
+    }));
+    
+    processedRecentEncounters.forEach(encounter => {
       const encounterDate = encounter.interaction_date || encounter.date || encounter.created_at || encounter.encounter_date || encounter.timestamp;
       
       if (!encounterDate) {
@@ -800,15 +829,19 @@ const ReportsAndAnalytics: React.FC = () => {
       }
       
       if (!monthlyStats[month]) {
-        monthlyStats[month] = { encounters: 0, individuals: new Set(), services: 0 };
+        monthlyStats[month] = { encounters: 0, individuals: new Set<string>(), services: 0 };
       }
       
-      monthlyStats[month].encounters += 1;
-      monthlyStats[month].individuals.add(encounter.client_id || encounter.id || encounter.client_name || encounter.name || 'unknown');
+      // Safely update stats
+      const currentMonthStats = monthlyStats[month];
+      currentMonthStats.encounters = currentMonthStats.encounters + 1;
+      
+      const individualId = String(encounter.client_id || encounter.id || encounter.client_name || encounter.name || 'unknown');
+      currentMonthStats.individuals.add(individualId);
       
       const services = encounter.services_provided || encounter.services || ['General'];
       const serviceArray = Array.isArray(services) ? services : [services];
-      monthlyStats[month].services += serviceArray.length;
+      currentMonthStats.services = currentMonthStats.services + serviceArray.length;
     });
 
     const comparison = Object.entries(monthlyStats)
@@ -847,21 +880,27 @@ const ReportsAndAnalytics: React.FC = () => {
       return !!encounterDate; // Just check that a date exists
     });
 
-    // Count unique individuals
-    const uniqueIndividuals = new Set();
+    // Count unique individuals - create new Set to avoid readonly issues
+    const uniqueIndividuals = new Set<string>();
     let totalServicesCount = 0;
     
-    filteredEncounters.forEach(encounter => {
+    // Create new objects to avoid readonly issues
+    const processedFilteredEncounters = filteredEncounters.map(encounter => ({
+      ...encounter, // Create new object to avoid readonly issues
+      processed: true
+    }));
+    
+    processedFilteredEncounters.forEach(encounter => {
       // Count unique individuals
       const individualId = encounter.client_id || encounter.id || encounter.client_name || encounter.name;
       if (individualId) {
-        uniqueIndividuals.add(individualId);
+        uniqueIndividuals.add(String(individualId));
       }
       
       // Count services
       const services = encounter.services_provided || encounter.services || ['General'];
       const serviceArray = Array.isArray(services) ? services : [services];
-      totalServicesCount += serviceArray.length;
+      totalServicesCount = totalServicesCount + serviceArray.length;
     });
 
     // Get total clients from localStorage for active clients count
