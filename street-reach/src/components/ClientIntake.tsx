@@ -203,7 +203,7 @@ const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
         };
 
         await supabase
-          .from('interactions')
+          .from('client_interactions')
           .insert([interactionData]);
       }
 

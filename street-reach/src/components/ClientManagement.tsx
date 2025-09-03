@@ -210,7 +210,7 @@ ${interaction.notes}
   const loadClientInteractions = async (clientId: string) => {
     try {
       const { data, error } = await supabase
-        .from('interactions')
+        .from('client_interactions')
         .select('*')
         .eq('client_id', clientId)
         .order('interaction_date', { ascending: false });
@@ -243,7 +243,7 @@ ${interaction.notes}
       };
 
       const { error } = await supabase
-        .from('interactions')
+        .from('client_interactions')
         .insert([interactionData]);
 
       if (error) throw error;
