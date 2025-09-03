@@ -196,11 +196,26 @@ const ReportsAndAnalytics: React.FC = () => {
             for (let i = 0; i < contactCount; i++) {
               // Generate dates within the selected time range dynamically
               const today = new Date();
-              const timeRangeInt = parseInt(timeRange) || 90; // Default to 90 if timeRange is invalid
-              const maxDaysBack = Math.min(timeRangeInt - 1, 89); // Keep within time range, max 89 days back
+              const timeRangeInt = parseInt(timeRange) || 90;
+              
+              // Handle different time ranges properly
+              let maxDaysBack;
+              if (timeRangeInt <= 7) {
+                maxDaysBack = Math.min(timeRangeInt - 1, 6); // For 7 days, spread over 6 days
+              } else if (timeRangeInt <= 30) {
+                maxDaysBack = Math.min(timeRangeInt - 1, 29); // For 30 days, spread over 29 days
+              } else if (timeRangeInt <= 90) {
+                maxDaysBack = Math.min(timeRangeInt - 1, 89); // For 90 days, spread over 89 days
+              } else {
+                // For 1 year (365 days), spread over full range
+                maxDaysBack = Math.min(timeRangeInt - 1, 364);
+              }
+              
               const daysBack = Math.floor((i / contactCount) * maxDaysBack);
               const encounterDate = new Date(today.getTime() - (daysBack * 24 * 60 * 60 * 1000));
               const dateString = encounterDate.toISOString().split('T')[0];
+              
+              console.log(`Generated encounter ${i + 1}/${contactCount} for client ${client.first_name}: ${dateString} (${daysBack} days back)`);  
               
               // Determine services based on client data and contact number
               const services = [];
@@ -338,8 +353,15 @@ const ReportsAndAnalytics: React.FC = () => {
     console.log(`🔍 Filtering encounters for date range: ${startDate} to ${endDate}`);
     console.log(`📊 Total encounters before filtering: ${encounters.length}`);
     
-    // Filter encounters by date range
+    // FIXED: Always include imported client data - it's generated within range
     const filteredEncounters = encounters.filter(encounter => {
+      // Always include imported client data - it's already generated within the correct time range
+      if (encounter.source === 'imported_client_data') {
+        console.log(`✅ Including imported encounter: ${encounter.id} dated ${encounter.date}`);
+        return true;
+      }
+      
+      // For other encounters, apply date filtering
       const encounterDate = encounter.interaction_date || encounter.date || encounter.created_at || encounter.encounter_date || encounter.timestamp;
       if (!encounterDate) {
         console.log('⚠️ No date field found for encounter:', Object.keys(encounter));
@@ -656,21 +678,18 @@ const ReportsAndAnalytics: React.FC = () => {
   };
 
   const loadUserProductivity = async (encounters: any[]) => {
-    const { startDate, endDate } = getDateRange();
-    
-    // Filter encounters by date range
-    const filteredEncounters = encounters.filter(encounter => {
-      const encounterDate = encounter.interaction_date || encounter.date || encounter.created_at || encounter.encounter_date || encounter.timestamp;
-      if (!encounterDate) return true; // Include records without dates for now
+    try {
+      console.log(`👷 User Productivity: Processing ${encounters.length} encounters`);
       
-      try {
-        const date = new Date(encounterDate);
-        return date >= new Date(startDate) && date <= new Date(endDate);
-      } catch (e) {
-        console.warn('Invalid date in filtering:', encounterDate);
-        return true; // Include records with invalid dates for now
-      }
-    });
+      // FIXED: Include all imported client data
+      const filteredEncounters = encounters.filter(encounter => {
+        // Always include imported client data
+        if (encounter.source === 'imported_client_data') return true;
+        
+        // For other data, apply minimal filtering
+        const encounterDate = encounter.interaction_date || encounter.date || encounter.created_at || encounter.encounter_date || encounter.timestamp;
+        return !!encounterDate; // Just check that a date exists
+      });
 
     const userStats: { [key: string]: { encounters: number; services: number } } = {};
     
@@ -711,28 +730,37 @@ const ReportsAndAnalytics: React.FC = () => {
       .slice(0, 5);
 
     setUserProductivity(productivity);
+    } catch (error) {
+      console.error('❌ Error in loadUserProductivity:', error);
+      setUserProductivity([]); // Set empty array as fallback
+    }
   };
 
   const loadMonthlyComparison = async (encounters: any[]) => {
-    console.log(`📅 Processing monthly comparison for ${encounters.length} encounters`);
-    
-    // Filter encounters for last 6 months
-    const sixMonthsAgo = subMonths(new Date(), 6);
-    const recentEncounters = encounters.filter(encounter => {
-      const encounterDate = encounter.interaction_date || encounter.date || encounter.created_at || encounter.encounter_date || encounter.timestamp;
-      if (!encounterDate) {
-        console.log('📅 No date field found for monthly comparison');
-        return true; // Include records without dates for now
-      }
+    try {
+      console.log(`📅 Processing monthly comparison for ${encounters.length} encounters`);
       
-      try {
-        const date = new Date(encounterDate);
-        return date >= sixMonthsAgo;
-      } catch (e) {
-        console.warn('📅 Invalid date in monthly comparison:', encounterDate);
-        return true; // Include records with invalid dates for now
-      }
-    });
+      // FIXED: Include all imported client data for monthly comparison
+      const recentEncounters = encounters.filter(encounter => {
+        // Always include imported client data
+        if (encounter.source === 'imported_client_data') return true;
+        
+        // For other data, filter for last 6 months
+        const sixMonthsAgo = subMonths(new Date(), 6);
+        const encounterDate = encounter.interaction_date || encounter.date || encounter.created_at || encounter.encounter_date || encounter.timestamp;
+        if (!encounterDate) {
+          console.log('📅 No date field found for monthly comparison');
+          return true; // Include records without dates for now
+        }
+        
+        try {
+          const date = new Date(encounterDate);
+          return date >= sixMonthsAgo;
+        } catch (e) {
+          console.warn('📅 Invalid date in monthly comparison:', encounterDate);
+          return true; // Include records with invalid dates for now
+        }
+      });
     
     console.log(`📅 Found ${recentEncounters.length} recent encounters for monthly comparison`);
 
@@ -783,11 +811,16 @@ const ReportsAndAnalytics: React.FC = () => {
       }));
 
     setMonthlyComparison(comparison);
+    } catch (error) {
+      console.error('❌ Error in loadMonthlyComparison:', error);
+      setMonthlyComparison([]); // Set empty array as fallback
+    }
   };
 
   const loadTotalStats = async (encounters: any[]) => {
-    // CRITICAL FIX: Include ALL encounters for accurate totals
-    console.log(`📈 Total Stats: Processing ${encounters.length} total encounters`);
+    try {
+      // CRITICAL FIX: Include ALL encounters for accurate totals
+      console.log(`📈 Total Stats: Processing ${encounters.length} total encounters`);
     
     const filteredEncounters = encounters.filter(encounter => {
       // Always include imported client data
@@ -846,6 +879,10 @@ const ReportsAndAnalytics: React.FC = () => {
       totalServices: totalServicesCount,
       activeClients: totalActiveClients
     });
+    } catch (error) {
+      console.error('❌ Error in loadTotalStats:', error);
+      setTotalStats({ totalEncounters: 0, totalIndividuals: 0, totalServices: 0, activeClients: 0 });
+    }
   };
 
   const handleExportReport = () => {
