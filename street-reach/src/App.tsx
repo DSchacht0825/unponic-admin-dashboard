@@ -242,11 +242,38 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Handle email verification from URL params
+    const handleEmailVerification = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const accessToken = urlParams.get('access_token');
+      const refreshToken = urlParams.get('refresh_token');
+      
+      if (accessToken && refreshToken) {
+        try {
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          
+          if (!error && data.user) {
+            setUser(data.user);
+            // Clear URL params after successful verification
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        } catch (error) {
+          console.error('Email verification error:', error);
+        }
+      }
+    };
+
     // Check if user is already logged in
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
+
+    // Handle email verification
+    handleEmailVerification();
 
     // Listen for auth changes
     const {
