@@ -26,4 +26,11 @@ export type Client = {
   date_created: string
   created_at?: string
   updated_at?: string
+  // HMIS fields for comprehensive client intake
+  has_children?: boolean
+  number_of_children?: number
+  children_ages?: string
+  is_veteran?: boolean
+  is_domestic_violence_victim?: boolean
+  current_housing_situation?: string
 }

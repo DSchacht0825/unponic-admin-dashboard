@@ -250,8 +250,11 @@ const ClientManagement: React.FC = () => {
         </Card>
         <Card sx={{ flex: '1 1 200px' }}>
           <CardContent>
-            <Typography variant="h5">{clients.filter(c => c.last_contact && new Date(c.last_contact) >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)).length}</Typography>
-            <Typography color="text.secondary">Recent Contacts</Typography>
+            <Typography variant="h5">{clients.filter(c => {
+              const createdDate = c.created_at ? new Date(c.created_at) : (c.date_created ? new Date(c.date_created) : null);
+              return createdDate && createdDate >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            }).length}</Typography>
+            <Typography color="text.secondary">Recent Clients</Typography>
           </CardContent>
         </Card>
         <Card sx={{ flex: '1 1 200px' }}>
