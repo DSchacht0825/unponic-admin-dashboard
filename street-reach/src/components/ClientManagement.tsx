@@ -232,7 +232,6 @@ ${interaction.notes}
     try {
       const interactionData = {
         client_id: selectedClient.id,
-        worker_id: user.id,
         worker_name: user.email?.split('@')[0] || 'Unknown Worker',
         interaction_type: interactionForm.type,
         notes: interactionForm.notes,

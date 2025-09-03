@@ -251,7 +251,6 @@ const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
       if (location && data) {
         const interactionData = {
           client_id: data.id,
-          worker_id: user.id,
           worker_name: user.email?.split('@')[0] || 'Unknown Worker',
           interaction_type: 'Initial Intake',
           notes: `Client intake completed. ${formData.notes ? `Notes: ${formData.notes}` : ''}`.trim(),
