@@ -359,26 +359,91 @@ const ReportsAndAnalytics: React.FC = () => {
         return true; // Include records with invalid dates for now
       }
     });
-
+    
+    console.log(`🎯 Processing ${filteredEncounters.length} encounters for service distribution`);
+    
     const serviceCounts: { [key: string]: number } = {};
     
-    filteredEncounters.forEach(encounter => {
-      const services = encounter.services_provided || encounter.services || ['General'];
+    filteredEncounters.forEach((encounter, index) => {
+      // Check multiple possible service fields from uploaded data
+      const services = encounter.services_provided || 
+                      encounter.services || 
+                      encounter.service_type || 
+                      encounter.service_category ||
+                      encounter.assistance_type ||
+                      encounter.referral_type ||
+                      ['General Contact'];
+      
       const serviceArray = Array.isArray(services) ? services : [services];
       
+      // Log first few to understand data structure
+      if (index < 5) {
+        console.log(`Service data sample ${index + 1}:`, {
+          services_provided: encounter.services_provided,
+          services: encounter.services,
+          service_type: encounter.service_type,
+          parsed: serviceArray
+        });
+      }
+      
       serviceArray.forEach((service: string) => {
-        const serviceName = service || 'General';
-        serviceCounts[serviceName] = (serviceCounts[serviceName] || 0) + 1;
+        // Clean and standardize service names
+        let serviceName = (service || 'General Contact').toString().trim();
+        
+        // Normalize common service variations
+        const serviceNormalization: { [key: string]: string } = {
+          'food': 'Food & Nutrition',
+          'meal': 'Food & Nutrition',
+          'nutrition': 'Food & Nutrition',
+          'housing': 'Housing Services',
+          'shelter': 'Housing Services',
+          'medical': 'Medical Services',
+          'healthcare': 'Medical Services',
+          'health': 'Medical Services',
+          'mental health': 'Mental Health Services',
+          'counseling': 'Mental Health Services',
+          'therapy': 'Mental Health Services',
+          'substance abuse': 'Substance Abuse Services',
+          'addiction': 'Substance Abuse Services',
+          'employment': 'Employment Services',
+          'job': 'Employment Services',
+          'benefits': 'Benefits Assistance',
+          'financial': 'Financial Assistance',
+          'transportation': 'Transportation',
+          'legal': 'Legal Services',
+          'referral': 'Referral Services',
+          'case management': 'Case Management',
+          'outreach': 'Outreach',
+          'contact': 'General Contact',
+          'general': 'General Contact'
+        };
+        
+        // Apply normalization
+        const normalizedName = serviceNormalization[serviceName.toLowerCase()] || 
+                               serviceName.charAt(0).toUpperCase() + serviceName.slice(1);
+        
+        serviceCounts[normalizedName] = (serviceCounts[normalizedName] || 0) + 1;
       });
     });
-
-    const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#8dd1e1', '#d084d0', '#ffb347'];
-    const distribution = Object.entries(serviceCounts).map(([name, value], index) => ({
-      name: name.charAt(0).toUpperCase() + name.slice(1),
-      value,
-      color: colors[index % colors.length]
-    }));
-
+    
+    console.log('📊 Service counts:', serviceCounts);
+    
+    // Enhanced color palette for more service types
+    const colors = [
+      '#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#8dd1e1', 
+      '#d084d0', '#ffb347', '#ff6b6b', '#4ecdc4', '#45b7d1',
+      '#96ceb4', '#feca57', '#ff9ff3', '#54a0ff', '#5f27cd'
+    ];
+    
+    const distribution = Object.entries(serviceCounts)
+      .sort(([,a], [,b]) => b - a) // Sort by count descending
+      .map(([name, value], index) => ({
+        name,
+        value,
+        color: colors[index % colors.length]
+      }));
+    
+    console.log('📈 Final service distribution:', distribution);
     setServiceDistribution(distribution);
   };
 
@@ -830,30 +895,83 @@ const ReportsAndAnalytics: React.FC = () => {
         </Paper>
 
         {/* Service Distribution */}
-        <Paper sx={{ flex: '1 1 400px', p: 3, minWidth: '400px' }}>
+        <Paper sx={{ flex: '1 1 800px', p: 3, minWidth: '800px' }}>
           <Typography variant="h6" gutterBottom>
-            Service Distribution
+            Services Provided Breakdown
           </Typography>
           {serviceDistribution.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={serviceDistribution}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${percent ? (percent * 100).toFixed(0) : 0}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {serviceDistribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            <Box sx={{ display: 'flex', gap: 3 }}>
+              {/* Pie Chart */}
+              <Box sx={{ flex: '0 0 350px' }}>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={serviceDistribution}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name} ${percent ? (percent * 100).toFixed(0) : 0}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {serviceDistribution.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => [`${value} encounters`, 'Count']} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </Box>
+              
+              {/* Detailed Service List */}
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
+                  Service Details
+                </Typography>
+                <List dense sx={{ maxHeight: 280, overflowY: 'auto' }}>
+                  {serviceDistribution
+                    .sort((a, b) => b.value - a.value)
+                    .map((service, index) => {
+                      const total = serviceDistribution.reduce((sum, s) => sum + s.value, 0);
+                      const percentage = ((service.value / total) * 100).toFixed(1);
+                      return (
+                        <ListItem key={service.name} sx={{ px: 0 }}>
+                          <ListItemIcon sx={{ minWidth: 32 }}>
+                            <Box 
+                              sx={{ 
+                                width: 16, 
+                                height: 16, 
+                                backgroundColor: service.color, 
+                                borderRadius: '50%' 
+                              }} 
+                            />
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                  {service.name}
+                                </Typography>
+                                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                                  <Chip 
+                                    label={`${service.value} encounters`} 
+                                    size="small" 
+                                    variant="outlined"
+                                  />
+                                  <Typography variant="body2" color="text.secondary">
+                                    {percentage}%
+                                  </Typography>
+                                </Box>
+                              </Box>
+                            }
+                          />
+                        </ListItem>
+                      );
+                    })}
+                </List>
+              </Box>
+            </Box>
           ) : (
             <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Typography color="text.secondary">No service data available</Typography>
