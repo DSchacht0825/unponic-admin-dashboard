@@ -167,10 +167,68 @@ const ReportsAndAnalytics: React.FC = () => {
         console.warn('Supabase data loading failed:', supabaseError);
       }
       
+      // 3. Load from Supabase clients table (imported client data as encounters)
+      try {
+        console.log('🔍 Loading imported client data from Supabase clients table...');
+        const { data: supabaseClients, error: clientError } = await supabase
+          .from('clients')
+          .select('*')
+          .order('created_at', { ascending: false });
+          
+        if (!clientError && supabaseClients && supabaseClients.length > 0) {
+          console.log(`📊 Found ${supabaseClients.length} clients in Supabase clients table`);
+          console.log('📋 Sample client record:', {
+            id: supabaseClients[0].id,
+            name: `${supabaseClients[0].first_name} ${supabaseClients[0].last_name}`,
+            last_contact: supabaseClients[0].last_contact,
+            contacts: supabaseClients[0].contacts,
+            created_at: supabaseClients[0].created_at,
+            date_created: supabaseClients[0].date_created
+          });
+          
+          // Convert client records to encounter format for analytics
+          const clientAsEncounters = supabaseClients
+            .filter(client => client.contacts > 0) // Only include clients with contact history
+            .map(client => ({
+              id: `client-${client.id}`,
+              client_id: client.id,
+              client_name: `${client.first_name} ${client.last_name}`,
+              interaction_date: client.last_contact || client.created_at || client.date_created,
+              encounter_date: client.last_contact,
+              date: client.last_contact || client.created_at,
+              created_at: client.created_at,
+              timestamp: client.created_at,
+              worker_name: 'Data Import',
+              worker: 'Data Import',
+              services_provided: ['General Contact'],
+              services: ['General Contact'],
+              service_type: 'Contact',
+              notes: client.notes || `Imported client: ${client.first_name} ${client.last_name}`,
+              location_lat: null,
+              location_lng: null,
+              // Include client contact count for metrics
+              contact_count: client.contacts || 1,
+              client_data: client
+            }));
+          
+          console.log(`📈 Converted ${clientAsEncounters.length} clients to encounter format`);
+          allEncounters = [...allEncounters, ...clientAsEncounters];
+        } else {
+          console.log('⚠️ No client data found in Supabase clients table');
+        }
+      } catch (clientError) {
+        console.warn('Supabase clients table loading failed:', clientError);
+      }
+      
       console.log(`📊 Total encounters for analytics: ${allEncounters.length}`);
       
-      // Filter out encounters that only have import timestamps (no real encounter date)
+      // Filter out encounters that only have import timestamps (but keep client-based encounters)
       const validEncounters = allEncounters.filter(encounter => {
+        // Always keep client-based encounters from the clients table
+        if (encounter.id && encounter.id.toString().startsWith('client-')) {
+          return true;
+        }
+        
         // Check if encounter has real date fields (not just import timestamp)
         const hasRealDate = encounter.encounter_date || encounter.service_date || encounter.original_date || encounter.date || 
                            (encounter.created_at && !encounter.created_at.includes('2025-09-02')) ||
@@ -365,14 +423,17 @@ const ReportsAndAnalytics: React.FC = () => {
     const serviceCounts: { [key: string]: number } = {};
     
     filteredEncounters.forEach((encounter, index) => {
-      // Check multiple possible service fields from uploaded data
+      // Check multiple possible service fields from uploaded data and client records
       const services = encounter.services_provided || 
                       encounter.services || 
                       encounter.service_type || 
                       encounter.service_category ||
                       encounter.assistance_type ||
                       encounter.referral_type ||
-                      ['General Contact'];
+                      encounter.program ||
+                      encounter.service_name ||
+                      (encounter.client_data && encounter.client_data.services) ||
+                      (encounter.contact_count > 1 ? ['Multiple Contacts'] : ['General Contact']);
       
       const serviceArray = Array.isArray(services) ? services : [services];
       
