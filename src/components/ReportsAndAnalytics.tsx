@@ -193,29 +193,36 @@ const ReportsAndAnalytics: React.FC = () => {
             // Create encounters based on contact count
             const contactCount = client.contacts || 1;
             
+            // Get current time range safely
+            const currentTimeRange = parseInt(timeRange) || 90;
+            console.log(`📅 Generating encounters for time range: ${currentTimeRange} days`);
+            
             for (let i = 0; i < contactCount; i++) {
               // Generate dates within the selected time range dynamically
               const today = new Date();
-              const timeRangeInt = parseInt(timeRange) || 90;
               
-              // Handle different time ranges properly
-              let maxDaysBack;
-              if (timeRangeInt <= 7) {
-                maxDaysBack = Math.min(timeRangeInt - 1, 6); // For 7 days, spread over 6 days
-              } else if (timeRangeInt <= 30) {
-                maxDaysBack = Math.min(timeRangeInt - 1, 29); // For 30 days, spread over 29 days
-              } else if (timeRangeInt <= 90) {
-                maxDaysBack = Math.min(timeRangeInt - 1, 89); // For 90 days, spread over 89 days
+              // Calculate max days back based on current time range
+              let maxDaysBack = 1; // Default minimum
+              
+              if (currentTimeRange === 7) {
+                maxDaysBack = 6; // Spread over 6 days for 7-day range
+              } else if (currentTimeRange === 30) {
+                maxDaysBack = 29; // Spread over 29 days for 30-day range
+              } else if (currentTimeRange === 90) {
+                maxDaysBack = 89; // Spread over 89 days for 90-day range
+              } else if (currentTimeRange === 365) {
+                maxDaysBack = 364; // Spread over 364 days for 1-year range
               } else {
-                // For 1 year (365 days), spread over full range
-                maxDaysBack = Math.min(timeRangeInt - 1, 364);
+                // Handle any other values
+                maxDaysBack = Math.max(1, currentTimeRange - 1);
               }
               
-              const daysBack = Math.floor((i / contactCount) * maxDaysBack);
+              // Distribute encounters evenly across the time period
+              const daysBack = Math.floor((i / Math.max(contactCount, 1)) * maxDaysBack);
               const encounterDate = new Date(today.getTime() - (daysBack * 24 * 60 * 60 * 1000));
               const dateString = encounterDate.toISOString().split('T')[0];
               
-              console.log(`Generated encounter ${i + 1}/${contactCount} for client ${client.first_name}: ${dateString} (${daysBack} days back)`);  
+              console.log(`✅ Generated encounter ${i + 1}/${contactCount} for ${client.first_name}: ${dateString} (${daysBack}/${maxDaysBack} days back, range=${currentTimeRange})`);  
               
               // Determine services based on client data and contact number
               const services = [];
@@ -253,13 +260,22 @@ const ReportsAndAnalytics: React.FC = () => {
             }
           });
           
-          console.log(`📈 GENERATED ${clientAsEncounters.length} ENCOUNTERS from ${clientsWithContacts.length} clients`);
-          console.log('📊 Sample encounters:', clientAsEncounters.slice(0, 3).map(e => ({
+          console.log(`📈 GENERATED ${clientAsEncounters.length} ENCOUNTERS from ${clientsWithContacts.length} clients for ${timeRange}-day range`);
+          console.log('📊 Sample encounters with dates:', clientAsEncounters.slice(0, 5).map(e => ({
             id: e.id,
             date: e.date,
             services: e.services,
-            client: e.client_name
+            client: e.client_name,
+            timeRange: timeRange
           })));
+          
+          // Verify date distribution
+          const dateCounts: { [key: string]: number } = {};
+          clientAsEncounters.forEach(e => {
+            const date = e.date;
+            dateCounts[date] = (dateCounts[date] || 0) + 1;
+          });
+          console.log('📅 Date distribution:', Object.keys(dateCounts).length, 'unique dates');
           
           allEncounters = [...allEncounters, ...clientAsEncounters];
         } else {
@@ -1068,8 +1084,9 @@ const ReportsAndAnalytics: React.FC = () => {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, percent }) => `${name} ${percent ? (percent * 100).toFixed(0) : 0}%`}
-                      outerRadius={80}
+                      label={false}
+                      outerRadius={100}
+                      innerRadius={40}
                       fill="#8884d8"
                       dataKey="value"
                     >
