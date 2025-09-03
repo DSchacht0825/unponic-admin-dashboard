@@ -15,7 +15,13 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Chip
+  Chip,
+  FormControlLabel,
+  Checkbox,
+  Divider,
+  FormControl,
+  InputLabel,
+  Select
 } from '@mui/material';
 import {
   LocationOn as LocationIcon,
@@ -36,21 +42,76 @@ interface Location {
   accuracy?: number;
 }
 
+interface ExtendedClientData extends Partial<Client> {
+  // Additional HMIS fields
+  identification_number?: string;
+  roi_completed?: string;
+  has_children?: boolean;
+  number_of_children?: number;
+  children_ages?: string;
+  is_veteran?: boolean;
+  is_domestic_violence_victim?: boolean;
+  current_housing_situation?: string;
+  homelessness_length?: string;
+  number_of_episodes?: number;
+  has_mental_illness?: boolean;
+  has_physical_disability?: boolean;
+  has_substance_use?: boolean;
+  has_legal_issues?: boolean;
+  has_income?: boolean;
+  income_source?: string;
+  has_transportation?: boolean;
+  transportation_type?: string;
+}
+
 const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
-  const [formData, setFormData] = useState<Partial<Client>>({
+  const [formData, setFormData] = useState<ExtendedClientData>({
+    // Basic Information
     first_name: '',
     middle: '',
     last_name: '',
     aka: '',
+    age: '',
+    identification_number: '',
+    roi_completed: 'na',
+    
+    // Demographics
     gender: '',
     ethnicity: '',
-    age: '',
+    has_children: false,
+    number_of_children: 0,
+    children_ages: '',
+    is_veteran: false,
+    is_domestic_violence_victim: false,
+    
+    // Homelessness History
+    current_housing_situation: '',
+    homelessness_length: '',
+    number_of_episodes: 0,
+    
+    // Health & Disabilities
+    has_mental_illness: false,
+    has_physical_disability: false,
+    has_substance_use: false,
+    has_legal_issues: false,
+    
+    // Income & Support
+    has_income: false,
+    income_source: '',
+    has_transportation: false,
+    transportation_type: '',
+    
+    // Physical Description (for field identification)
     height: '',
     weight: '',
     hair: '',
     eyes: '',
     description: '',
+    
+    // Notes
     notes: '',
+    
+    // System fields
     last_contact: '',
     contacts: 0,
     date_created: format(new Date(), 'yyyy-MM-dd')
@@ -64,6 +125,7 @@ const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
   const [success, setSuccess] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState<any[]>([]);
   const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
     getCurrentLocation();
@@ -100,16 +162,16 @@ const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
     );
   };
 
-  const handleInputChange = (field: keyof Client) => (event: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = event.target.value;
+  const handleInputChange = (field: keyof ExtendedClientData) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
     setFormData(prev => ({
       ...prev,
-      [field]: newValue
+      [field]: value
     }));
 
     // Check for duplicates when first or last name changes
     if (field === 'first_name' || field === 'last_name') {
-      const updatedData = { ...formData, [field]: newValue };
+      const updatedData = { ...formData, [field]: event.target.value };
       if (updatedData.first_name && updatedData.last_name) {
         checkForDuplicates(updatedData.first_name, updatedData.last_name);
       }
@@ -120,8 +182,6 @@ const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
     if (!firstName || !lastName) return;
 
     try {
-      const fullName = `${firstName} ${lastName}`.toLowerCase();
-      
       const { data: exactMatches } = await supabase
         .from('clients')
         .select('*')
@@ -172,8 +232,7 @@ const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
     setError('');
 
     try {
-
-      const clientData: Partial<Client> = {
+      const clientData: any = {
         ...formData,
         contacts: 1, // First encounter
         last_contact: format(new Date(), 'yyyy-MM-dd HH:mm:ss'),
@@ -215,9 +274,27 @@ const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
         middle: '',
         last_name: '',
         aka: '',
+        age: '',
+        identification_number: '',
+        roi_completed: 'na',
         gender: '',
         ethnicity: '',
-        age: '',
+        has_children: false,
+        number_of_children: 0,
+        children_ages: '',
+        is_veteran: false,
+        is_domestic_violence_victim: false,
+        current_housing_situation: '',
+        homelessness_length: '',
+        number_of_episodes: 0,
+        has_mental_illness: false,
+        has_physical_disability: false,
+        has_substance_use: false,
+        has_legal_issues: false,
+        has_income: false,
+        income_source: '',
+        has_transportation: false,
+        transportation_type: '',
         height: '',
         weight: '',
         hair: '',
@@ -228,6 +305,7 @@ const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
         contacts: 0,
         date_created: format(new Date(), 'yyyy-MM-dd')
       });
+      setCurrentStep(0);
 
       onClientAdded?.();
 
@@ -241,20 +319,33 @@ const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
   const genderOptions = [
     'Male',
     'Female',
+    'Transgender',
     'Non-binary',
-    'Prefer not to say'
+    'Other',
+    'Client Declined'
   ];
 
   const ethnicityOptions = [
+    'Hispanic/Latino',
+    'Non-Hispanic/Non-Latino',
     'White/Caucasian',
     'Black/African American',
-    'Hispanic/Latino',
     'Asian',
     'Native American',
     'Pacific Islander',
     'Mixed Race',
     'Other',
-    'Prefer not to say'
+    'Client Declined'
+  ];
+
+  const housingOptions = [
+    'Street/Outdoors',
+    'Vehicle',
+    'Emergency Shelter',
+    'Transitional Housing',
+    'Doubled Up',
+    'Hotel/Motel',
+    'Other'
   ];
 
   const hairOptions = [
@@ -276,6 +367,384 @@ const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
     'Gray',
     'Other'
   ];
+
+  const steps = [
+    'Basic Information',
+    'Demographics',
+    'Homelessness History',
+    'Health & Support',
+    'Physical Description'
+  ];
+
+  const renderBasicInformation = () => (
+    <Stack spacing={2}>
+      <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+        <TextField
+          fullWidth
+          label="First Name *"
+          value={formData.first_name}
+          onChange={handleInputChange('first_name')}
+          required
+        />
+        <TextField
+          fullWidth
+          label="Middle Name"
+          value={formData.middle}
+          onChange={handleInputChange('middle')}
+        />
+        <TextField
+          fullWidth
+          label="Last Name *"
+          value={formData.last_name}
+          onChange={handleInputChange('last_name')}
+          required
+        />
+      </Box>
+
+      <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+        <TextField
+          fullWidth
+          label="AKA / Street Name / Aliases"
+          value={formData.aka}
+          onChange={handleInputChange('aka')}
+        />
+        <TextField
+          fullWidth
+          label="Age"
+          value={formData.age}
+          onChange={handleInputChange('age')}
+          placeholder="e.g., 35, 20s, Unknown"
+        />
+      </Box>
+
+      <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+        <TextField
+          fullWidth
+          label="Identification Number"
+          value={formData.identification_number}
+          onChange={handleInputChange('identification_number')}
+          placeholder="ID, SSN (last 4), etc."
+        />
+        <FormControl fullWidth>
+          <InputLabel>ROI Completed</InputLabel>
+          <Select
+            value={formData.roi_completed}
+            onChange={(e) => setFormData(prev => ({ ...prev, roi_completed: e.target.value }))}
+          >
+            <MenuItem value="yes">Yes</MenuItem>
+            <MenuItem value="no">No</MenuItem>
+            <MenuItem value="na">N/A</MenuItem>
+          </Select>
+        </FormControl>
+      </Box>
+    </Stack>
+  );
+
+  const renderDemographics = () => (
+    <Stack spacing={2}>
+      <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+        <TextField
+          fullWidth
+          select
+          label="Gender"
+          value={formData.gender}
+          onChange={handleInputChange('gender')}
+        >
+          {genderOptions.map((option) => (
+            <MenuItem key={option} value={option}>
+              {option}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          fullWidth
+          select
+          label="Ethnicity"
+          value={formData.ethnicity}
+          onChange={handleInputChange('ethnicity')}
+        >
+          {ethnicityOptions.map((option) => (
+            <MenuItem key={option} value={option}>
+              {option}
+            </MenuItem>
+          ))}
+        </TextField>
+      </Box>
+
+      <Divider />
+      
+      <Typography variant="subtitle2" color="text.secondary">
+        Special Populations
+      </Typography>
+
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={formData.is_veteran}
+              onChange={handleInputChange('is_veteran')}
+            />
+          }
+          label="Veteran"
+        />
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={formData.is_domestic_violence_victim}
+              onChange={handleInputChange('is_domestic_violence_victim')}
+            />
+          }
+          label="Domestic Violence Victim/Survivor"
+        />
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={formData.has_children}
+              onChange={handleInputChange('has_children')}
+            />
+          }
+          label="Has Children"
+        />
+      </Box>
+
+      {formData.has_children && (
+        <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+          <TextField
+            fullWidth
+            label="Number of Children"
+            type="number"
+            value={formData.number_of_children}
+            onChange={handleInputChange('number_of_children')}
+          />
+          <TextField
+            fullWidth
+            label="Ages of Children"
+            value={formData.children_ages}
+            onChange={handleInputChange('children_ages')}
+            placeholder="e.g., 5, 8, 12"
+          />
+        </Box>
+      )}
+    </Stack>
+  );
+
+  const renderHomelessnessHistory = () => (
+    <Stack spacing={2}>
+      <TextField
+        fullWidth
+        select
+        label="Current Housing Situation"
+        value={formData.current_housing_situation}
+        onChange={handleInputChange('current_housing_situation')}
+      >
+        {housingOptions.map((option) => (
+          <MenuItem key={option} value={option}>
+            {option}
+          </MenuItem>
+        ))}
+      </TextField>
+
+      <TextField
+        fullWidth
+        label="Length of Homelessness"
+        value={formData.homelessness_length}
+        onChange={handleInputChange('homelessness_length')}
+        placeholder="e.g., 6 months, 2 years"
+      />
+
+      <TextField
+        fullWidth
+        label="Number of Episodes (past 3 years)"
+        type="number"
+        value={formData.number_of_episodes}
+        onChange={handleInputChange('number_of_episodes')}
+      />
+    </Stack>
+  );
+
+  const renderHealthAndSupport = () => (
+    <Stack spacing={2}>
+      <Typography variant="subtitle2" color="text.secondary">
+        Health & Disabilities
+      </Typography>
+      
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={formData.has_mental_illness}
+              onChange={handleInputChange('has_mental_illness')}
+            />
+          }
+          label="Mental Illness"
+        />
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={formData.has_physical_disability}
+              onChange={handleInputChange('has_physical_disability')}
+            />
+          }
+          label="Physical Disability"
+        />
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={formData.has_substance_use}
+              onChange={handleInputChange('has_substance_use')}
+            />
+          }
+          label="Substance Use"
+        />
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={formData.has_legal_issues}
+              onChange={handleInputChange('has_legal_issues')}
+            />
+          }
+          label="Legal Issues"
+        />
+      </Box>
+
+      <Divider />
+      
+      <Typography variant="subtitle2" color="text.secondary">
+        Income & Transportation
+      </Typography>
+
+      <FormControlLabel
+        control={
+          <Checkbox
+            checked={formData.has_income}
+            onChange={handleInputChange('has_income')}
+          />
+        }
+        label="Has Income"
+      />
+
+      {formData.has_income && (
+        <TextField
+          fullWidth
+          label="Income Source"
+          value={formData.income_source}
+          onChange={handleInputChange('income_source')}
+          placeholder="e.g., SSI, SSDI, Employment, etc."
+        />
+      )}
+
+      <FormControlLabel
+        control={
+          <Checkbox
+            checked={formData.has_transportation}
+            onChange={handleInputChange('has_transportation')}
+          />
+        }
+        label="Has Transportation"
+      />
+
+      {formData.has_transportation && (
+        <TextField
+          fullWidth
+          label="Transportation Type"
+          value={formData.transportation_type}
+          onChange={handleInputChange('transportation_type')}
+          placeholder="e.g., Car, Bicycle, Public Transit"
+        />
+      )}
+    </Stack>
+  );
+
+  const renderPhysicalDescription = () => (
+    <Stack spacing={2}>
+      <Typography variant="subtitle2" color="text.secondary">
+        Physical Description (for field identification)
+      </Typography>
+      
+      <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+        <TextField
+          fullWidth
+          label="Height"
+          value={formData.height}
+          onChange={handleInputChange('height')}
+          placeholder="e.g., 5'8, 170cm, Tall"
+        />
+        <TextField
+          fullWidth
+          label="Weight"
+          value={formData.weight}
+          onChange={handleInputChange('weight')}
+          placeholder="e.g., 150lbs, Medium build"
+        />
+      </Box>
+
+      <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+        <TextField
+          fullWidth
+          select
+          label="Hair Color"
+          value={formData.hair}
+          onChange={handleInputChange('hair')}
+        >
+          {hairOptions.map((option) => (
+            <MenuItem key={option} value={option}>
+              {option}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          fullWidth
+          select
+          label="Eye Color"
+          value={formData.eyes}
+          onChange={handleInputChange('eyes')}
+        >
+          {eyeOptions.map((option) => (
+            <MenuItem key={option} value={option}>
+              {option}
+            </MenuItem>
+          ))}
+        </TextField>
+      </Box>
+
+      <TextField
+        fullWidth
+        multiline
+        rows={2}
+        label="Distinguishing Features"
+        value={formData.description}
+        onChange={handleInputChange('description')}
+        placeholder="Tattoos, scars, clothing style, etc."
+      />
+
+      <TextField
+        fullWidth
+        multiline
+        rows={3}
+        label="Additional Notes"
+        value={formData.notes}
+        onChange={handleInputChange('notes')}
+        placeholder="Services needed, circumstances, observations..."
+      />
+    </Stack>
+  );
+
+  const renderStepContent = () => {
+    switch (currentStep) {
+      case 0:
+        return renderBasicInformation();
+      case 1:
+        return renderDemographics();
+      case 2:
+        return renderHomelessnessHistory();
+      case 3:
+        return renderHealthAndSupport();
+      case 4:
+        return renderPhysicalDescription();
+      default:
+        return null;
+    }
+  };
 
   return (
     <Box sx={{ p: 2, pb: 8 }}>
@@ -361,167 +830,60 @@ const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
         </Alert>
       )}
 
+      {/* Step Indicators */}
+      <Box sx={{ mb: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+          {steps.map((step, index) => (
+            <Chip
+              key={index}
+              label={index + 1}
+              size="small"
+              color={currentStep >= index ? 'primary' : 'default'}
+              onClick={() => setCurrentStep(index)}
+            />
+          ))}
+        </Box>
+        <Typography variant="caption" color="text.secondary">
+          Step {currentStep + 1} of {steps.length}: {steps[currentStep]}
+        </Typography>
+      </Box>
+
       <form onSubmit={handleSubmit}>
         <Card>
           <CardContent>
             <Typography variant="h6" gutterBottom>
-              Basic Information
+              {steps[currentStep]}
             </Typography>
             
-            <Stack spacing={2}>
-              <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-                <TextField
-                  fullWidth
-                  label="First Name *"
-                  value={formData.first_name}
-                  onChange={handleInputChange('first_name')}
-                  required
-                />
-                <TextField
-                  fullWidth
-                  label="Last Name *"
-                  value={formData.last_name}
-                  onChange={handleInputChange('last_name')}
-                  required
-                />
-              </Box>
+            {renderStepContent()}
 
-              <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-                <TextField
-                  fullWidth
-                  label="Middle Name"
-                  value={formData.middle}
-                  onChange={handleInputChange('middle')}
-                />
-                <TextField
-                  fullWidth
-                  label="AKA / Street Name"
-                  value={formData.aka}
-                  onChange={handleInputChange('aka')}
-                />
-              </Box>
-
-              <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-                <TextField
-                  fullWidth
-                  select
-                  label="Gender"
-                  value={formData.gender}
-                  onChange={handleInputChange('gender')}
-                >
-                  {genderOptions.map((option) => (
-                    <MenuItem key={option} value={option}>
-                      {option}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  fullWidth
-                  label="Age"
-                  value={formData.age}
-                  onChange={handleInputChange('age')}
-                  placeholder="e.g., 35, 20s, Unknown"
-                />
-              </Box>
-
-              <TextField
-                fullWidth
-                select
-                label="Ethnicity"
-                value={formData.ethnicity}
-                onChange={handleInputChange('ethnicity')}
-              >
-                {ethnicityOptions.map((option) => (
-                  <MenuItem key={option} value={option}>
-                    {option}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Stack>
-
-            <Typography variant="h6" sx={{ mt: 3, mb: 2 }}>
-              Physical Description
-            </Typography>
-
-            <Stack spacing={2}>
-              <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-                <TextField
-                  fullWidth
-                  label="Height"
-                  value={formData.height}
-                  onChange={handleInputChange('height')}
-                  placeholder="e.g., 5'8, 170cm, Tall"
-                />
-                <TextField
-                  fullWidth
-                  label="Weight"
-                  value={formData.weight}
-                  onChange={handleInputChange('weight')}
-                  placeholder="e.g., 150lbs, Medium build"
-                />
-              </Box>
-
-              <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-                <TextField
-                  fullWidth
-                  select
-                  label="Hair Color"
-                  value={formData.hair}
-                  onChange={handleInputChange('hair')}
-                >
-                  {hairOptions.map((option) => (
-                    <MenuItem key={option} value={option}>
-                      {option}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  fullWidth
-                  select
-                  label="Eye Color"
-                  value={formData.eyes}
-                  onChange={handleInputChange('eyes')}
-                >
-                  {eyeOptions.map((option) => (
-                    <MenuItem key={option} value={option}>
-                      {option}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Box>
-
-              <TextField
-                fullWidth
-                multiline
-                rows={3}
-                label="Physical Description"
-                value={formData.description}
-                onChange={handleInputChange('description')}
-                placeholder="Distinguishing features, clothing, etc."
-              />
-
-              <TextField
-                fullWidth
-                multiline
-                rows={3}
-                label="Notes"
-                value={formData.notes}
-                onChange={handleInputChange('notes')}
-                placeholder="Additional observations, needs, circumstances..."
-              />
-            </Stack>
-
-            <Box sx={{ mt: 3 }}>
+            <Box sx={{ mt: 3, display: 'flex', gap: 2, justifyContent: 'space-between' }}>
               <Button
-                type="submit"
-                variant="contained"
-                size="large"
-                fullWidth
-                startIcon={saving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
-                disabled={saving || !formData.first_name || !formData.last_name}
+                variant="outlined"
+                onClick={() => setCurrentStep(prev => Math.max(0, prev - 1))}
+                disabled={currentStep === 0}
               >
-                {saving ? 'Saving...' : 'Save Client'}
+                Previous
               </Button>
+
+              {currentStep < steps.length - 1 ? (
+                <Button
+                  variant="contained"
+                  onClick={() => setCurrentStep(prev => Math.min(steps.length - 1, prev + 1))}
+                >
+                  Next
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  variant="contained"
+                  size="large"
+                  startIcon={saving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
+                  disabled={saving || !formData.first_name || !formData.last_name}
+                >
+                  {saving ? 'Saving...' : 'Save Client'}
+                </Button>
+              )}
             </Box>
           </CardContent>
         </Card>
