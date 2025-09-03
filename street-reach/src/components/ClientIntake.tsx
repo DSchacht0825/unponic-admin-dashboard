@@ -223,6 +223,10 @@ const ClientIntake: React.FC<ClientIntakeProps> = ({ user, onClientAdded }) => {
           Client Intake
         </Typography>
       </Box>
+      
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3, fontStyle: 'italic' }}>
+        "Helping Our Hurting Neighbors Rebuild Their Lives"
+      </Typography>
 
       {/* Location Status */}
       <Card sx={{ mb: 3, bgcolor: location ? 'success.light' : 'warning.light' }}>

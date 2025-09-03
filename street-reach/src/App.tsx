@@ -24,10 +24,18 @@ import ClientIntake from './components/ClientIntake';
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#2E7D32', // Green for outreach/community work
+      main: '#1565C0', // SDRM Blue - professional and trustworthy
     },
     secondary: {
-      main: '#FF9800', // Orange for attention/urgency
+      main: '#D32F2F', // SDRM Red - compassionate and urgent for mission work
+    },
+    background: {
+      default: '#f8f9fa',
+      paper: '#ffffff',
+    },
+    text: {
+      primary: '#212529',
+      secondary: '#6c757d',
     },
   },
   typography: {
@@ -101,17 +109,25 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #2E7D32 0%, #4CAF50 100%)',
+        background: 'linear-gradient(135deg, #1565C0 0%, #1976D2 100%)',
         padding: 2,
       }}
     >
       <Card sx={{ maxWidth: 400, width: '100%' }}>
         <CardContent sx={{ p: 4 }}>
-          <Typography variant="h4" align="center" color="primary" gutterBottom>
+          <Box sx={{ textAlign: 'center', mb: 2 }}>
+            <img 
+              src="https://www.sdrescue.org/wp-content/uploads/2021/06/SDRMLogo2016.svg"
+              alt="San Diego Rescue Mission"
+              style={{ maxWidth: '200px', height: 'auto', marginBottom: '16px' }}
+            />
+          </Box>
+          <Typography variant="h5" align="center" color="primary" gutterBottom>
             Street Reach
           </Typography>
           <Typography variant="body2" align="center" color="text.secondary" sx={{ mb: 3 }}>
-            Outreach Worker Portal
+            Outreach Worker Portal<br />
+            San Diego Rescue Mission
           </Typography>
           
           {error && (
@@ -199,9 +215,16 @@ const MainApp: React.FC<MainAppProps> = ({ user, onLogout }) => {
           alignItems: 'center',
         }}
       >
-        <Typography variant="h6">
-          Street Reach
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <img 
+            src="https://www.sdrescue.org/wp-content/uploads/2021/06/SDRMLogo2016.svg"
+            alt="SDRM"
+            style={{ height: '32px', width: 'auto', filter: 'brightness(0) invert(1)' }}
+          />
+          <Typography variant="h6">
+            Street Reach
+          </Typography>
+        </Box>
         <Button 
           color="inherit" 
           onClick={onLogout}
