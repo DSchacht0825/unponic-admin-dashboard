@@ -154,15 +154,16 @@ const UserManagement: React.FC = () => {
     setSuccess('');
 
     try {
-      // Create user in Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      // For demonstration, we'll use signUp which works with anon key
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: newUser.email,
         password: newUser.password,
-        email_confirm: true,
-        user_metadata: {
-          name: newUser.name,
-          role: newUser.role,
-          department: newUser.department,
+        options: {
+          data: {
+            name: newUser.name,
+            role: newUser.role,
+            department: newUser.department,
+          }
         }
       });
 
@@ -170,7 +171,10 @@ const UserManagement: React.FC = () => {
 
       const user: User = {
         id: authData.user?.id || Date.now().toString(),
-        ...newUser,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role as User['role'],
+        department: newUser.department,
         joinDate: new Date(),
         status: 'active',
         encountersLogged: 0,
@@ -178,7 +182,7 @@ const UserManagement: React.FC = () => {
       };
       
       setUsers([...users, user]);
-      setSuccess(`User ${newUser.name} created successfully!`);
+      setSuccess(`User ${newUser.name} created successfully! They will receive a confirmation email.`);
       setDialogOpen(false);
       setNewUser({ name: '', email: '', role: 'volunteer', department: '', password: '' });
       
