@@ -172,14 +172,18 @@ const MainApp: React.FC<MainAppProps> = ({ user, onLogout }) => {
     setCurrentTab(0); // Switch to clients tab after adding
   };
 
+  const handleSwitchToIntake = () => {
+    setCurrentTab(1);
+  };
+
   const renderCurrentTab = () => {
     switch (currentTab) {
       case 0:
-        return <ClientManagement user={user} key={refreshClients} />;
+        return <ClientManagement user={user} key={refreshClients} onSwitchToIntake={handleSwitchToIntake} />;
       case 1:
         return <ClientIntake user={user} onClientAdded={handleClientAdded} />;
       default:
-        return <ClientManagement user={user} key={refreshClients} />;
+        return <ClientManagement user={user} key={refreshClients} onSwitchToIntake={handleSwitchToIntake} />;
     }
   };
 

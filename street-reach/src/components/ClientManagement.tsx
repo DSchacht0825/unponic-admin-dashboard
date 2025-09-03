@@ -29,9 +29,10 @@ import { supabase, Client } from '../lib/supabase';
 
 interface ClientManagementProps {
   user: any;
+  onSwitchToIntake?: () => void;
 }
 
-const ClientManagement: React.FC<ClientManagementProps> = ({ user }) => {
+const ClientManagement: React.FC<ClientManagementProps> = ({ user, onSwitchToIntake }) => {
   const [clients, setClients] = useState<Client[]>([]);
   const [filteredClients, setFilteredClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,10 +109,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ user }) => {
         <Button
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={() => {
-            setSelectedClient(null);
-            setOpenDialog(true);
-          }}
+          onClick={onSwitchToIntake}
           sx={{ borderRadius: 20 }}
         >
           Add Client
@@ -222,10 +220,10 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ user }) => {
         fullScreen={window.innerWidth < 600} // Full screen on mobile
       >
         <DialogTitle>
-          {selectedClient ? 'Client Details' : 'Add New Client'}
+          Client Details
         </DialogTitle>
         <DialogContent>
-          {selectedClient ? (
+          {selectedClient && (
             <Box sx={{ pt: 1 }}>
               <Typography variant="h6" gutterBottom>
                 {selectedClient.first_name} {selectedClient.middle} {selectedClient.last_name}
@@ -296,10 +294,6 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ user }) => {
                 </Box>
               </Box>
             </Box>
-          ) : (
-            <Typography variant="body2" color="text.secondary" sx={{ pt: 1 }}>
-              Client intake form coming soon...
-            </Typography>
           )}
         </DialogContent>
         <DialogActions>
