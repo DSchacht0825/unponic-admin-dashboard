@@ -1034,7 +1034,7 @@ const ReportsAndAnalytics: React.FC = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box key={`analytics-${timeRange}`} sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">Reports & Analytics</Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
@@ -1132,7 +1132,7 @@ const ReportsAndAnalytics: React.FC = () => {
             Daily Encounter Trends
           </Typography>
           {encounterTrends.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer key={`trends-${timeRange}`} width="100%" height={300}>
               <LineChart data={encounterTrends}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" />
@@ -1160,7 +1160,7 @@ const ReportsAndAnalytics: React.FC = () => {
             <Box sx={{ display: 'flex', gap: 3 }}>
               {/* Pie Chart */}
               <Box sx={{ flex: '0 0 350px' }}>
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer key={`services-${timeRange}`} width="100%" height={300}>
                   <PieChart>
                     <Pie
                       data={serviceDistribution}
@@ -1270,7 +1270,7 @@ const ReportsAndAnalytics: React.FC = () => {
             Worker Productivity
           </Typography>
           {userProductivity.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer key={`productivity-${timeRange}`} width="100%" height={300}>
               <BarChart data={userProductivity}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
@@ -1294,7 +1294,7 @@ const ReportsAndAnalytics: React.FC = () => {
             Monthly Comparison
           </Typography>
           {monthlyComparison.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer key={`monthly-${timeRange}`} width="100%" height={300}>
               <AreaChart data={monthlyComparison}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
