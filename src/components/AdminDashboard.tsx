@@ -96,12 +96,19 @@ const AdminDashboard: React.FC = () => {
     <div>
       <Toolbar>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
-          <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32 }}>
-            O
-          </Avatar>
-          <Typography variant="h6" noWrap component="div">
-            Outreach Admin
-          </Typography>
+          <img 
+            src="https://www.sdrescue.org/wp-content/uploads/2021/06/SDRMLogo2016.svg"
+            alt="SDRM"
+            style={{ height: '32px', width: 'auto' }}
+          />
+          <Box>
+            <Typography variant="subtitle1" noWrap component="div" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
+              Admin Dashboard
+            </Typography>
+            <Typography variant="caption" noWrap component="div" color="text.secondary">
+              San Diego Rescue Mission
+            </Typography>
+          </Box>
         </Box>
       </Toolbar>
       <Divider />
@@ -161,9 +168,16 @@ const AdminDashboard: React.FC = () => {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            {navigationItems[selectedIndex].text}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexGrow: 1 }}>
+            <img 
+              src="https://www.sdrescue.org/wp-content/uploads/2021/06/SDRMLogo2016.svg"
+              alt="SDRM"
+              style={{ height: '24px', width: 'auto', filter: 'brightness(0) invert(1)' }}
+            />
+            <Typography variant="h6" noWrap component="div">
+              {navigationItems[selectedIndex].text}
+            </Typography>
+          </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <IconButton color="inherit">
               <Badge badgeContent={4} color="error">
