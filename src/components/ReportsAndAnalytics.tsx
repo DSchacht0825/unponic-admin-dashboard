@@ -220,7 +220,7 @@ const ReportsAndAnalytics: React.FC = () => {
               }
               
               // Remove duplicates
-              services = [...new Set(services)];
+              services = services.filter((service, index, arr) => arr.indexOf(service) === index);
               
               // Create multiple encounters based on contact count for accurate metrics
               const contactCount = client.contacts || 1;
@@ -260,7 +260,8 @@ const ReportsAndAnalytics: React.FC = () => {
               }
             });
           
-          console.log(`📈 Converted ${clientAsEncounters.length} clients to encounter format`);
+          console.log(`📈 Converted ${clientAsEncounters.length} encounters from ${supabaseClients.length} clients`);
+          console.log('📊 Sample converted encounters:', clientAsEncounters.slice(0, 3));
           allEncounters = [...allEncounters, ...clientAsEncounters];
         } else {
           console.log('⚠️ No client data found in Supabase clients table');
@@ -291,6 +292,15 @@ const ReportsAndAnalytics: React.FC = () => {
       });
       
       console.log(`📊 Valid encounters after filtering import check: ${validEncounters.length}`);
+      
+      if (validEncounters.length > 0) {
+        console.log('📋 Sample valid encounters:', validEncounters.slice(0, 3).map(e => ({
+          id: e.id,
+          date: e.interaction_date || e.date || e.created_at,
+          services: e.services_provided || e.services,
+          worker: e.worker_name || e.worker
+        })));
+      }
       
       if (validEncounters.length === 0) {
         setError('No valid encounter data available. All encounters appear to have only import timestamps.');
