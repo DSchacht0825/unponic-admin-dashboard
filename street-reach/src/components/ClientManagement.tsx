@@ -4,6 +4,7 @@ import {
   Typography,
   Button,
   Card,
+  CardContent,
   TextField,
   Dialog,
   DialogTitle,
@@ -16,7 +17,9 @@ import {
   Chip,
   Divider,
   Alert,
-  ListItemButton
+  ListItemButton,
+  CircularProgress,
+  MenuItem
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -40,6 +43,15 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ user, onSwitchToInt
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [error, setError] = useState('');
+  const [interactionDialog, setInteractionDialog] = useState(false);
+  const [interactionForm, setInteractionForm] = useState({
+    type: '',
+    notes: '',
+    location: null as any,
+    locationError: ''
+  });
+  const [savingInteraction, setSavingInteraction] = useState(false);
+  const [interactions, setInteractions] = useState<any[]>([]);
 
   useEffect(() => {
     loadClients();
@@ -76,6 +88,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ user, onSwitchToInt
   const handleClientClick = (client: Client) => {
     setSelectedClient(client);
     setOpenDialog(true);
+    loadClientInteractions(client.id!);
   };
 
   const handleCloseDialog = () => {
@@ -88,6 +101,117 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ user, onSwitchToInt
       return new Date(dateString).toLocaleDateString();
     } catch {
       return dateString;
+    }
+  };
+
+  const interactionTypes = [
+    'Check-in',
+    'Service Provided', 
+    'Referral Given',
+    'Medical Assistance',
+    'Food/Water',
+    'Transportation',
+    'Housing Support',
+    'Mental Health',
+    'Other'
+  ];
+
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setInteractionForm(prev => ({ ...prev, locationError: 'Geolocation not supported' }));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setInteractionForm(prev => ({
+          ...prev,
+          location: {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          },
+          locationError: ''
+        }));
+      },
+      (error) => {
+        setInteractionForm(prev => ({ ...prev, locationError: `Location error: ${error.message}` }));
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+    );
+  };
+
+  const handleLogInteraction = (client: Client) => {
+    setSelectedClient(client);
+    setInteractionDialog(true);
+    setInteractionForm({
+      type: '',
+      notes: '',
+      location: null,
+      locationError: ''
+    });
+    getCurrentLocation();
+    loadClientInteractions(client.id!);
+  };
+
+  const loadClientInteractions = async (clientId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('interactions')
+        .select('*')
+        .eq('client_id', clientId)
+        .order('interaction_date', { ascending: false });
+      
+      if (error) throw error;
+      setInteractions(data || []);
+    } catch (error: any) {
+      console.error('Error loading interactions:', error);
+    }
+  };
+
+  const handleSaveInteraction = async () => {
+    if (!selectedClient || !interactionForm.type || !interactionForm.notes) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    setSavingInteraction(true);
+    try {
+      const interactionData = {
+        client_id: selectedClient.id,
+        worker_id: user.id,
+        worker_name: user.email?.split('@')[0] || 'Unknown Worker',
+        interaction_type: interactionForm.type,
+        notes: interactionForm.notes,
+        location_lat: interactionForm.location?.latitude || 0,
+        location_lng: interactionForm.location?.longitude || 0,
+        interaction_date: new Date().toISOString(),
+        created_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('interactions')
+        .insert([interactionData]);
+
+      if (error) throw error;
+
+      // Update client's last contact date
+      await supabase
+        .from('clients')
+        .update({
+          last_contact: new Date().toISOString(),
+          contacts: (selectedClient.contacts || 0) + 1
+        })
+        .eq('id', selectedClient.id);
+
+      setInteractionDialog(false);
+      setInteractionForm({ type: '', notes: '', location: null, locationError: '' });
+      loadClients(); // Refresh client list
+      
+    } catch (error: any) {
+      setError(`Failed to save interaction: ${error.message}`);
+    } finally {
+      setSavingInteraction(false);
     }
   };
 
@@ -292,6 +416,32 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ user, onSwitchToInt
                     {selectedClient.created_at ? formatDate(selectedClient.created_at) : formatDate(selectedClient.date_created)}
                   </Typography>
                 </Box>
+
+                {/* Interaction History */}
+                {interactions.length > 0 && (
+                  <Box sx={{ mt: 3 }}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Recent Interactions ({interactions.length})
+                    </Typography>
+                    <Box sx={{ maxHeight: 200, overflow: 'auto' }}>
+                      {interactions.slice(0, 3).map((interaction, index) => (
+                        <Card key={index} sx={{ mb: 1, bgcolor: 'grey.50' }}>
+                          <CardContent sx={{ py: 1, px: 2 }}>
+                            <Typography variant="subtitle2" color="primary">
+                              {interaction.interaction_type}
+                            </Typography>
+                            <Typography variant="body2" sx={{ mb: 0.5 }}>
+                              {interaction.notes}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {formatDate(interaction.interaction_date)} • {interaction.worker_name}
+                            </Typography>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </Box>
+                  </Box>
+                )}
               </Box>
             </Box>
           )}
@@ -301,10 +451,125 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ user, onSwitchToInt
             Close
           </Button>
           {selectedClient && (
-            <Button variant="contained" startIcon={<LocationIcon />}>
+            <Button 
+              variant="contained" 
+              startIcon={<LocationIcon />}
+              onClick={() => handleLogInteraction(selectedClient)}
+            >
               Log Interaction
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Log Interaction Dialog */}
+      <Dialog
+        open={interactionDialog}
+        onClose={() => setInteractionDialog(false)}
+        fullWidth
+        maxWidth="sm"
+        fullScreen={window.innerWidth < 600}
+      >
+        <DialogTitle>
+          Log Interaction
+          {selectedClient && ` - ${selectedClient.first_name} ${selectedClient.last_name}`}
+        </DialogTitle>
+        <DialogContent>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          {/* Location Status */}
+          <Card sx={{ mb: 2, bgcolor: interactionForm.location ? 'success.light' : 'warning.light' }}>
+            <CardContent sx={{ py: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <LocationIcon />
+                {interactionForm.location ? (
+                  <Box>
+                    <Typography variant="body2" color="success.dark">
+                      Location captured (±{Math.round(interactionForm.location.accuracy || 0)}m)
+                    </Typography>
+                    <Typography variant="caption" color="success.dark">
+                      {interactionForm.location.latitude.toFixed(6)}, {interactionForm.location.longitude.toFixed(6)}
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Typography variant="body2" color="warning.dark">
+                    {interactionForm.locationError || 'Getting location...'}
+                  </Typography>
+                )}
+              </Box>
+            </CardContent>
+          </Card>
+
+          <TextField
+            fullWidth
+            select
+            label="Interaction Type *"
+            value={interactionForm.type}
+            onChange={(e) => setInteractionForm(prev => ({ ...prev, type: e.target.value }))}
+            margin="normal"
+            required
+          >
+            {interactionTypes.map((type) => (
+              <MenuItem key={type} value={type}>
+                {type}
+              </MenuItem>
+            ))}
+          </TextField>
+
+          <TextField
+            fullWidth
+            multiline
+            rows={4}
+            label="Notes *"
+            value={interactionForm.notes}
+            onChange={(e) => setInteractionForm(prev => ({ ...prev, notes: e.target.value }))}
+            margin="normal"
+            required
+            placeholder="Describe the interaction, services provided, client needs, etc."
+          />
+
+          {/* Interaction History */}
+          {interactions.length > 0 && (
+            <Box sx={{ mt: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Recent Interactions ({interactions.length})
+              </Typography>
+              <Box sx={{ maxHeight: 200, overflow: 'auto' }}>
+                {interactions.slice(0, 5).map((interaction, index) => (
+                  <Card key={index} sx={{ mb: 1, bgcolor: 'grey.50' }}>
+                    <CardContent sx={{ py: 1, px: 2 }}>
+                      <Typography variant="subtitle2" color="primary">
+                        {interaction.interaction_type}
+                      </Typography>
+                      <Typography variant="body2" sx={{ mb: 0.5 }}>
+                        {interaction.notes}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {formatDate(interaction.interaction_date)} • {interaction.worker_name}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                ))}
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setInteractionDialog(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSaveInteraction}
+            disabled={savingInteraction || !interactionForm.type || !interactionForm.notes}
+            startIcon={savingInteraction ? <CircularProgress size={20} /> : <LocationIcon />}
+          >
+            {savingInteraction ? 'Saving...' : 'Save Interaction'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>
