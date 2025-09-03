@@ -149,6 +149,17 @@ ${interaction.notes}
     }
   };
 
+  const copyInteractionText = async (notes: string) => {
+    try {
+      await navigator.clipboard.writeText(notes);
+      setCopySuccess('Notes copied to clipboard!');
+      setTimeout(() => setCopySuccess(''), 3000);
+    } catch (err) {
+      setCopySuccess('Failed to copy - please select and copy manually');
+      setTimeout(() => setCopySuccess(''), 3000);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     try {
       return new Date(dateString).toLocaleDateString();
@@ -596,17 +607,38 @@ ${interaction.notes}
             ))}
           </TextField>
 
-          <TextField
-            fullWidth
-            multiline
-            rows={4}
-            label="Notes *"
-            value={interactionForm.notes}
-            onChange={(e) => setInteractionForm(prev => ({ ...prev, notes: e.target.value }))}
-            margin="normal"
-            required
-            placeholder="Describe the interaction, services provided, client needs, etc."
-          />
+          <Box sx={{ position: 'relative' }}>
+            <TextField
+              fullWidth
+              multiline
+              rows={4}
+              label="Notes *"
+              value={interactionForm.notes}
+              onChange={(e) => setInteractionForm(prev => ({ ...prev, notes: e.target.value }))}
+              margin="normal"
+              required
+              placeholder="Describe the interaction, services provided, client needs, etc."
+            />
+            {interactionForm.notes && (
+              <IconButton
+                size="small"
+                onClick={() => copyInteractionText(interactionForm.notes)}
+                title="Copy notes"
+                sx={{
+                  position: 'absolute',
+                  top: '20px',
+                  right: '8px',
+                  bgcolor: 'background.paper',
+                  '&:hover': {
+                    bgcolor: 'primary.main',
+                    color: 'white'
+                  }
+                }}
+              >
+                <CopyIcon fontSize="small" />
+              </IconButton>
+            )}
+          </Box>
 
           {/* Interaction History */}
           {interactions.length > 0 && (
