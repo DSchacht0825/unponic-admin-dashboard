@@ -108,6 +108,7 @@ const ReportsAndAnalytics: React.FC = () => {
     setError(null);
     
     try {
+      console.log(`🔄 Loading analytics for time range: ${timeRange} days`);
       // Load data from both localStorage AND Supabase for live site compatibility
       let allEncounters: any[] = [];
       
@@ -193,9 +194,12 @@ const ReportsAndAnalytics: React.FC = () => {
             const contactCount = client.contacts || 1;
             
             for (let i = 0; i < contactCount; i++) {
-              // Use a simple date within the last 90 days to ensure it passes filtering
+              // Generate dates within the selected time range dynamically
               const today = new Date();
-              const encounterDate = new Date(today.getTime() - (i * 2 * 24 * 60 * 60 * 1000)); // Spread over last few days
+              const timeRangeInt = parseInt(timeRange) || 90; // Default to 90 if timeRange is invalid
+              const maxDaysBack = Math.min(timeRangeInt - 1, 89); // Keep within time range, max 89 days back
+              const daysBack = Math.floor((i / contactCount) * maxDaysBack);
+              const encounterDate = new Date(today.getTime() - (daysBack * 24 * 60 * 60 * 1000));
               const dateString = encounterDate.toISOString().split('T')[0];
               
               // Determine services based on client data and contact number
@@ -284,18 +288,25 @@ const ReportsAndAnalytics: React.FC = () => {
       }
 
       // Process all analytics with the filtered valid data
-      await Promise.all([
-        loadEncounterTrends(validEncounters),
-        loadServiceDistribution(validEncounters),
-        loadLocationHotspots(validEncounters),
-        loadUserProductivity(validEncounters),
-        loadMonthlyComparison(validEncounters),
-        loadTotalStats(validEncounters)
-      ]);
+      try {
+        await Promise.all([
+          loadEncounterTrends(validEncounters).catch(e => console.error('Encounter trends error:', e)),
+          loadServiceDistribution(validEncounters).catch(e => console.error('Service distribution error:', e)),
+          loadLocationHotspots(validEncounters).catch(e => console.error('Location hotspots error:', e)),
+          loadUserProductivity(validEncounters).catch(e => console.error('User productivity error:', e)),
+          loadMonthlyComparison(validEncounters).catch(e => console.error('Monthly comparison error:', e)),
+          loadTotalStats(validEncounters).catch(e => console.error('Total stats error:', e))
+        ]);
+        
+        console.log('✅ All analytics functions completed successfully');
+      } catch (analyticsError) {
+        console.error('❌ Analytics processing failed:', analyticsError);
+        setError(`Analytics processing failed: ${analyticsError instanceof Error ? analyticsError.message : 'Unknown error'}`);
+      }
       
     } catch (err) {
-      console.error('Error loading analytics data:', err);
-      setError('Failed to load analytics data');
+      console.error('❌ Error loading analytics data:', err);
+      setError(`Failed to load analytics data: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -320,7 +331,9 @@ const ReportsAndAnalytics: React.FC = () => {
   };
 
   const loadEncounterTrends = async (encounters: any[]) => {
-    const { startDate, endDate } = getDateRange();
+    try {
+      console.log(`📈 Loading encounter trends for ${encounters.length} encounters`);
+      const { startDate, endDate } = getDateRange();
     
     console.log(`🔍 Filtering encounters for date range: ${startDate} to ${endDate}`);
     console.log(`📊 Total encounters before filtering: ${encounters.length}`);
@@ -445,11 +458,16 @@ const ReportsAndAnalytics: React.FC = () => {
       }));
 
     setEncounterTrends(trends);
+    } catch (error) {
+      console.error('❌ Error in loadEncounterTrends:', error);
+      setEncounterTrends([]); // Set empty array as fallback
+    }
   };
 
   const loadServiceDistribution = async (encounters: any[]) => {
-    // CRITICAL FIX: Use ALL encounters, no date filtering for imported data
-    console.log(`🎯 Service Distribution: Processing ${encounters.length} total encounters`);
+    try {
+      // CRITICAL FIX: Use ALL encounters, no date filtering for imported data
+      console.log(`🎯 Service Distribution: Processing ${encounters.length} total encounters`);
     
     const filteredEncounters = encounters.filter(encounter => {
       // Always include imported client data
@@ -548,6 +566,10 @@ const ReportsAndAnalytics: React.FC = () => {
     
     console.log('📈 Final service distribution:', distribution);
     setServiceDistribution(distribution);
+    } catch (error) {
+      console.error('❌ Error in loadServiceDistribution:', error);
+      setServiceDistribution([]); // Set empty array as fallback
+    }
   };
 
   const loadLocationHotspots = async (encounters: any[]) => {
