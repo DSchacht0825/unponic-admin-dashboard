@@ -236,7 +236,8 @@ const ReportsAndAnalytics: React.FC = () => {
               // Default service if none found
               if (services.length === 0) services.push('General Contact');
               
-              clientAsEncounters.push({
+              // Create a completely new encounter object with copied arrays to prevent readonly errors
+              const encounterObj = {
                 id: `client-${client.id}-contact-${i + 1}`,
                 client_id: client.id,
                 client_name: `${client.first_name} ${client.last_name}`.trim(),
@@ -247,8 +248,8 @@ const ReportsAndAnalytics: React.FC = () => {
                 timestamp: dateString,
                 worker_name: 'Data Import',
                 worker: 'Data Import',
-                services_provided: services,
-                services: services,
+                services_provided: [...services], // Create a new array copy
+                services: [...services], // Create a new array copy
                 service_type: services[0],
                 notes: `Client: ${client.first_name} ${client.last_name} - Contact ${i + 1} of ${contactCount}`,
                 location_lat: null,
@@ -256,7 +257,10 @@ const ReportsAndAnalytics: React.FC = () => {
                 contact_count: contactCount,
                 encounter_number: i + 1,
                 source: 'imported_client_data'
-              });
+              };
+              
+              // Push the encounter object without sealing/freezing it
+              clientAsEncounters.push(encounterObj);
             }
           });
           
