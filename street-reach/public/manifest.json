@@ -1,6 +1,7 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "Street Reach",
+  "name": "Street Reach - San Diego Rescue Mission",
+  "description": "Outreach worker portal for tracking client interactions and providing community services",
   "icons": [
     {
       "src": "favicon.ico",
@@ -10,16 +11,25 @@
     {
       "src": "logo192.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "maskable any"
     },
     {
       "src": "logo512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "maskable any"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "orientation": "portrait-primary",
+  "theme_color": "#1565C0",
+  "background_color": "#1565C0",
+  "categories": ["productivity", "utilities", "social"],
+  "scope": "/",
+  "lang": "en-US",
+  "dir": "ltr",
+  "display_override": ["window-controls-overlay"],
+  "prefer_related_applications": false
 }

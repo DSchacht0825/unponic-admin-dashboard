@@ -267,8 +267,19 @@ const MainApp: React.FC<MainAppProps> = ({ user, onLogout }) => {
 function App() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
 
   useEffect(() => {
+    // PWA Install Prompt
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallPrompt(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
     // Handle email verification from URL params
     const handleEmailVerification = async () => {
       const urlParams = new URLSearchParams(window.location.search);
@@ -309,12 +320,26 @@ function App() {
       setUser(session?.user ?? null);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
+  };
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+        setShowInstallPrompt(false);
+      }
+    }
   };
 
   if (loading) {
@@ -339,7 +364,47 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       {user ? (
-        <MainApp user={user} onLogout={handleLogout} />
+        <>
+          <MainApp user={user} onLogout={handleLogout} />
+          {showInstallPrompt && (
+            <Box
+              sx={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bgcolor: 'primary.main',
+                color: 'white',
+                p: 2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                zIndex: 1300,
+              }}
+            >
+              <Typography variant="body2">
+                📱 Install Street Reach for quick access
+              </Typography>
+              <Box>
+                <Button
+                  size="small"
+                  color="inherit"
+                  onClick={handleInstallClick}
+                  sx={{ mr: 1 }}
+                >
+                  Install
+                </Button>
+                <Button
+                  size="small"
+                  color="inherit"
+                  onClick={() => setShowInstallPrompt(false)}
+                >
+                  Dismiss
+                </Button>
+              </Box>
+            </Box>
+          )}
+        </>
       ) : (
         <LoginScreen onLogin={setUser} />
       )}
