@@ -510,7 +510,9 @@ const ReportsAndAnalytics: React.FC = () => {
         services: stats.services
       }));
 
-    setEncounterTrends(trends);
+    // Deep clone to ensure immutability and prevent readonly errors
+    const immutableTrends = JSON.parse(JSON.stringify(trends));
+    setEncounterTrends(immutableTrends);
     } catch (error) {
       console.error('❌ Error in loadEncounterTrends:', error);
       setEncounterTrends([]); // Set empty array as fallback
@@ -618,7 +620,10 @@ const ReportsAndAnalytics: React.FC = () => {
       }));
     
     console.log('📈 Final service distribution:', distribution);
-    setServiceDistribution(distribution);
+    
+    // Deep clone to ensure immutability and prevent readonly errors
+    const immutableDistribution = JSON.parse(JSON.stringify(distribution));
+    setServiceDistribution(immutableDistribution);
     } catch (error) {
       console.error('❌ Error in loadServiceDistribution:', error);
       setServiceDistribution([]); // Set empty array as fallback
@@ -705,7 +710,9 @@ const ReportsAndAnalytics: React.FC = () => {
         lng: data.lng
       }));
 
-    setLocationHotspots(hotspots);
+    // Deep clone to ensure immutability and prevent readonly errors
+    const immutableHotspots = JSON.parse(JSON.stringify(hotspots));
+    setLocationHotspots(immutableHotspots);
   };
 
   const loadUserProductivity = async (encounters: any[]) => {
@@ -768,7 +775,9 @@ const ReportsAndAnalytics: React.FC = () => {
       .sort((a, b) => b.encounters - a.encounters)
       .slice(0, 5);
 
-    setUserProductivity(productivity);
+    // Deep clone to ensure immutability and prevent readonly errors
+    const immutableProductivity = JSON.parse(JSON.stringify(productivity));
+    setUserProductivity(immutableProductivity);
     } catch (error) {
       console.error('❌ Error in loadUserProductivity:', error);
       setUserProductivity([]); // Set empty array as fallback
@@ -859,7 +868,9 @@ const ReportsAndAnalytics: React.FC = () => {
         services: stats.services
       }));
 
-    setMonthlyComparison(comparison);
+    // Deep clone to ensure immutability and prevent readonly errors
+    const immutableComparison = JSON.parse(JSON.stringify(comparison));
+    setMonthlyComparison(immutableComparison);
     } catch (error) {
       console.error('❌ Error in loadMonthlyComparison:', error);
       setMonthlyComparison([]); // Set empty array as fallback
@@ -928,12 +939,16 @@ const ReportsAndAnalytics: React.FC = () => {
       console.warn('Could not load clients count from localStorage:', error);
     }
 
-    setTotalStats({
+    const statsData = {
       totalEncounters: filteredEncounters.length,
       totalIndividuals: uniqueIndividuals.size,
       totalServices: totalServicesCount,
       activeClients: totalActiveClients
-    });
+    };
+    
+    // Deep clone to ensure immutability and prevent readonly errors
+    const immutableStats = JSON.parse(JSON.stringify(statsData));
+    setTotalStats(immutableStats);
     } catch (error) {
       console.error('❌ Error in loadTotalStats:', error);
       setTotalStats({ totalEncounters: 0, totalIndividuals: 0, totalServices: 0, activeClients: 0 });
