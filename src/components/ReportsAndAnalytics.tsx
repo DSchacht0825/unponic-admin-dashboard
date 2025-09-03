@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -15,6 +15,9 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
+  CircularProgress,
+  Alert,
+  SelectChangeEvent,
 } from '@mui/material';
 import {
   People,
@@ -41,59 +44,634 @@ import {
   AreaChart,
   Area,
 } from 'recharts';
+import { format, subDays, subMonths, parseISO } from 'date-fns';
+import { supabase } from '../lib/supabase';
+
+interface EncounterTrend {
+  date: string;
+  encounters: number;
+  individuals: number;
+  services: number;
+}
+
+interface ServiceDistribution {
+  name: string;
+  value: number;
+  color: string;
+}
+
+interface LocationHotspot {
+  location: string;
+  encounters: number;
+  lat?: number;
+  lng?: number;
+}
+
+interface UserProductivity {
+  name: string;
+  encounters: number;
+  services: number;
+  efficiency: number;
+}
+
+interface MonthlyComparison {
+  month: string;
+  encounters: number;
+  individuals: number;
+  services: number;
+}
 
 const ReportsAndAnalytics: React.FC = () => {
-  const [timeRange, setTimeRange] = useState('30');
+  const [timeRange, setTimeRange] = useState('90'); // Match the display
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Real data states
+  const [encounterTrends, setEncounterTrends] = useState<EncounterTrend[]>([]);
+  const [serviceDistribution, setServiceDistribution] = useState<ServiceDistribution[]>([]);
+  const [locationHotspots, setLocationHotspots] = useState<LocationHotspot[]>([]);
+  const [userProductivity, setUserProductivity] = useState<UserProductivity[]>([]);
+  const [monthlyComparison, setMonthlyComparison] = useState<MonthlyComparison[]>([]);
+  const [totalStats, setTotalStats] = useState({
+    totalEncounters: 0,
+    totalIndividuals: 0,
+    totalServices: 0,
+    activeClients: 0
+  });
 
-  // Mock data for various charts
-  const encounterTrends = [
-    { date: '2024-01-01', encounters: 12, individuals: 18, services: 25 },
-    { date: '2024-01-02', encounters: 15, individuals: 22, services: 31 },
-    { date: '2024-01-03', encounters: 8, individuals: 12, services: 18 },
-    { date: '2024-01-04', encounters: 20, individuals: 28, services: 42 },
-    { date: '2024-01-05', encounters: 16, individuals: 24, services: 35 },
-    { date: '2024-01-06', encounters: 18, individuals: 26, services: 38 },
-    { date: '2024-01-07', encounters: 22, individuals: 32, services: 45 },
-  ];
+  useEffect(() => {
+    loadAnalyticsData();
+  }, [timeRange]);
 
-  const serviceDistribution = [
-    { name: 'Food', value: 35, color: '#8884d8' },
-    { name: 'Clothing', value: 25, color: '#82ca9d' },
-    { name: 'Medical', value: 20, color: '#ffc658' },
-    { name: 'Housing', value: 15, color: '#ff7300' },
-    { name: 'Mental Health', value: 5, color: '#8dd1e1' },
-  ];
+  const loadAnalyticsData = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Load data from both localStorage AND Supabase for live site compatibility
+      let allEncounters: any[] = [];
+      
+      // 1. Load from localStorage (imported data)
+      console.log('🔍 Checking localStorage for client data...');
+      const possibleKeys = ['clientEncounters', 'encounters', 'activeClients', 'clients', 'clientData', 'interactions'];
+      let foundData = false;
+      
+      for (const key of possibleKeys) {
+        const data = localStorage.getItem(key);
+        if (data) {
+          try {
+            const parsed = JSON.parse(data);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              console.log(`📊 Found ${parsed.length} records in localStorage key: ${key}`);
+              console.log('📋 Available date fields in sample record:', Object.keys(parsed[0]).filter(k => 
+                k.toLowerCase().includes('date') || k.toLowerCase().includes('time') || k.toLowerCase().includes('created')
+              ));
+              console.log('📋 Sample date values:', {
+                interaction_date: parsed[0].interaction_date,
+                date: parsed[0].date,
+                created_at: parsed[0].created_at,
+                encounter_date: parsed[0].encounter_date,
+                timestamp: parsed[0].timestamp,
+                original_date: parsed[0].original_date,
+                service_date: parsed[0].service_date
+              });
+              allEncounters = [...allEncounters, ...parsed];
+              foundData = true;
+              break;
+            }
+          } catch (e) {
+            console.warn(`❌ Failed to parse localStorage key ${key}:`, e);
+          }
+        }
+      }
+      
+      if (!foundData) {
+        console.log('⚠️ No localStorage data found, checking all keys...');
+        Object.keys(localStorage).forEach(key => {
+          console.log(`   - localStorage key: "${key}"`);
+        });
+      }
+      
+      // 2. Load from Supabase (live database data)
+      try {
+        const { data: supabaseInteractions, error } = await supabase
+          .from('client_interactions')
+          .select('*')
+          .order('interaction_date', { ascending: false });
+          
+        if (!error && supabaseInteractions) {
+          console.log(`📊 Loaded ${supabaseInteractions.length} interactions from Supabase`);
+          allEncounters = [...allEncounters, ...supabaseInteractions];
+        }
+      } catch (supabaseError) {
+        console.warn('Supabase data loading failed:', supabaseError);
+      }
+      
+      console.log(`📊 Total encounters for analytics: ${allEncounters.length}`);
+      
+      // Filter out encounters that only have import timestamps (no real encounter date)
+      const validEncounters = allEncounters.filter(encounter => {
+        // Check if encounter has real date fields (not just import timestamp)
+        const hasRealDate = encounter.encounter_date || encounter.service_date || encounter.original_date || encounter.date || 
+                           (encounter.created_at && !encounter.created_at.includes('2025-09-02')) ||
+                           (encounter.interaction_date && !encounter.interaction_date.includes('2025-09-02'));
+        
+        if (!hasRealDate && encounter.timestamp && encounter.timestamp.includes('2025-09-02')) {
+          console.log('⚠️ Filtering out encounter with only import timestamp:', encounter.timestamp);
+          return false;
+        }
+        return true;
+      });
+      
+      console.log(`📊 Valid encounters after filtering import check: ${validEncounters.length}`);
+      
+      if (validEncounters.length === 0) {
+        setError('No valid encounter data available. All encounters appear to have only import timestamps.');
+        return;
+      }
 
-  const locationHotspots = [
-    { location: 'Downtown Vista', encounters: 45, lat: 33.2002, lng: -117.2425 },
-    { location: 'Civic Center Area', encounters: 32, lat: 33.2034, lng: -117.2447 },
-    { location: 'Vista Village', encounters: 28, lat: 33.1987, lng: -117.2501 },
-    { location: 'Rancho Minerva', encounters: 22, lat: 33.1923, lng: -117.2389 },
-    { location: 'Business Park', encounters: 18, lat: 33.2078, lng: -117.2512 },
-  ];
+      // Process all analytics with the filtered valid data
+      await Promise.all([
+        loadEncounterTrends(validEncounters),
+        loadServiceDistribution(validEncounters),
+        loadLocationHotspots(validEncounters),
+        loadUserProductivity(validEncounters),
+        loadMonthlyComparison(validEncounters),
+        loadTotalStats(validEncounters)
+      ]);
+      
+    } catch (err) {
+      console.error('Error loading analytics data:', err);
+      setError('Failed to load analytics data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const userProductivity = [
-    { name: 'Sarah J.', encounters: 45, services: 68, efficiency: 1.5 },
-    { name: 'Mike D.', encounters: 38, services: 55, efficiency: 1.4 },
-    { name: 'Lisa C.', encounters: 32, services: 48, efficiency: 1.5 },
-    { name: 'Tom R.', encounters: 29, services: 41, efficiency: 1.4 },
-    { name: 'Ana M.', encounters: 25, services: 35, efficiency: 1.4 },
-  ];
+  const getDateRange = () => {
+    const days = parseInt(timeRange);
+    const endDate = new Date();
+    const startDate = subDays(endDate, days);
+    return { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
+  };
 
-  const monthlyComparison = [
-    { month: 'Oct', encounters: 234, individuals: 312, services: 456 },
-    { month: 'Nov', encounters: 267, individuals: 345, services: 523 },
-    { month: 'Dec', encounters: 298, individuals: 398, services: 587 },
-    { month: 'Jan', encounters: 312, individuals: 425, services: 634 },
-  ];
+  const loadEncounterTrends = async (encounters: any[]) => {
+    const { startDate, endDate } = getDateRange();
+    
+    console.log(`🔍 Filtering encounters for date range: ${startDate} to ${endDate}`);
+    console.log(`📊 Total encounters before filtering: ${encounters.length}`);
+    
+    // Filter encounters by date range
+    const filteredEncounters = encounters.filter(encounter => {
+      const encounterDate = encounter.interaction_date || encounter.date || encounter.created_at || encounter.encounter_date || encounter.timestamp;
+      if (!encounterDate) {
+        console.log('⚠️ No date field found for encounter:', Object.keys(encounter));
+        return true; // Include records without dates for now
+      }
+      
+      try {
+        const date = new Date(encounterDate);
+        const isInRange = date >= new Date(startDate) && date <= new Date(endDate);
+        if (!isInRange) {
+          console.log(`📅 Encounter ${encounterDate} outside range ${startDate} - ${endDate}`);
+        }
+        return isInRange;
+      } catch (e) {
+        console.warn('⚠️ Invalid date format:', encounterDate);
+        return true; // Include records with invalid dates for now
+      }
+    });
+    
+    console.log(`📊 Encounters after date filtering: ${filteredEncounters.length}`);
+
+    // Group by date
+    const trendsMap: { [key: string]: { encounters: number; individuals: Set<string>; services: number } } = {};
+    let sept2Count = 0;
+    
+    filteredEncounters.forEach(encounter => {
+      // Look for original encounter dates first, avoid import timestamps
+      const encounterDate = encounter.encounter_date || encounter.service_date || encounter.original_date || encounter.date || 
+                           // Only use created_at/interaction_date if they don't look like import timestamps
+                           (encounter.created_at && !encounter.created_at.includes('2025-09-02') ? encounter.created_at : null) ||
+                           (encounter.interaction_date && !encounter.interaction_date.includes('2025-09-02') ? encounter.interaction_date : null) ||
+                           encounter.timestamp;
+      
+      let date;
+      if (encounterDate) {
+        try {
+          // Handle different date formats more precisely
+          const dateObj = new Date(encounterDate);
+          
+          // Check if it's a valid date
+          if (isNaN(dateObj.getTime())) {
+            console.warn('Invalid date:', encounterDate);
+            return; // Skip invalid dates instead of using fallback
+          }
+          
+          date = dateObj.toISOString().split('T')[0];
+          
+          // Debug logging for today's date specifically (limit to first 5)
+          if (date === '2025-09-02' && sept2Count < 5) {
+            const whichField = encounter.encounter_date ? 'encounter_date' : 
+                              encounter.service_date ? 'service_date' :
+                              encounter.original_date ? 'original_date' :
+                              encounter.date ? 'date' :
+                              (encounter.created_at && !encounter.created_at.includes('2025-09-02')) ? 'created_at' :
+                              (encounter.interaction_date && !encounter.interaction_date.includes('2025-09-02')) ? 'interaction_date' :
+                              'timestamp';
+            
+            console.log('🔍 SEPT 2ND #' + (sept2Count + 1) + ' USING FIELD: ' + whichField);
+            console.log('🔍 SELECTED DATE VALUE: ' + encounterDate);
+            console.log('🔍 ALL DATE FIELDS:', JSON.stringify({
+              encounter_date: encounter.encounter_date,
+              service_date: encounter.service_date, 
+              original_date: encounter.original_date,
+              date: encounter.date,
+              created_at: encounter.created_at,
+              interaction_date: encounter.interaction_date,
+              timestamp: encounter.timestamp
+            }, null, 2));
+            sept2Count++;
+          }
+        } catch (e) {
+          console.warn('Could not parse date:', encounterDate);
+          return; // Skip unparseable dates instead of using fallback
+        }
+      } else {
+        console.log('No date field found in encounter:', Object.keys(encounter));
+        return; // Skip encounters without dates instead of using fallback
+      }
+      
+      if (!trendsMap[date]) {
+        trendsMap[date] = { encounters: 0, individuals: new Set(), services: 0 };
+      }
+      
+      trendsMap[date].encounters += 1;
+      trendsMap[date].individuals.add(encounter.client_id || encounter.id || encounter.client_name || encounter.name || 'unknown');
+      
+      const services = encounter.services_provided || encounter.services || ['general'];
+      const serviceArray = Array.isArray(services) ? services : [services];
+      trendsMap[date].services += serviceArray.length;
+    });
+    
+    const dailyBreakdown = Object.keys(trendsMap).sort().map(date => ({
+      date,
+      encounters: trendsMap[date].encounters,
+      individuals: trendsMap[date].individuals.size
+    }));
+    
+    console.log('📊 Daily trends breakdown:', dailyBreakdown);
+    
+    // Specifically check Sept 2nd
+    if (trendsMap['2025-09-02']) {
+      console.log('🎯 Sept 2nd detailed count:', {
+        totalEncounters: trendsMap['2025-09-02'].encounters,
+        uniqueIndividuals: trendsMap['2025-09-02'].individuals.size,
+        individualsList: Array.from(trendsMap['2025-09-02'].individuals)
+      });
+    }
+
+    const trends = Object.entries(trendsMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, stats]) => ({
+        date: format(parseISO(date), 'MMM dd'),
+        encounters: stats.encounters,
+        individuals: stats.individuals.size,
+        services: stats.services
+      }));
+
+    setEncounterTrends(trends);
+  };
+
+  const loadServiceDistribution = async (encounters: any[]) => {
+    const { startDate, endDate } = getDateRange();
+    
+    // Filter encounters by date range
+    const filteredEncounters = encounters.filter(encounter => {
+      const encounterDate = encounter.interaction_date || encounter.date || encounter.created_at || encounter.encounter_date || encounter.timestamp;
+      if (!encounterDate) return true; // Include records without dates for now
+      
+      try {
+        const date = new Date(encounterDate);
+        return date >= new Date(startDate) && date <= new Date(endDate);
+      } catch (e) {
+        console.warn('Invalid date in filtering:', encounterDate);
+        return true; // Include records with invalid dates for now
+      }
+    });
+
+    const serviceCounts: { [key: string]: number } = {};
+    
+    filteredEncounters.forEach(encounter => {
+      const services = encounter.services_provided || encounter.services || ['General'];
+      const serviceArray = Array.isArray(services) ? services : [services];
+      
+      serviceArray.forEach((service: string) => {
+        const serviceName = service || 'General';
+        serviceCounts[serviceName] = (serviceCounts[serviceName] || 0) + 1;
+      });
+    });
+
+    const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#8dd1e1', '#d084d0', '#ffb347'];
+    const distribution = Object.entries(serviceCounts).map(([name, value], index) => ({
+      name: name.charAt(0).toUpperCase() + name.slice(1),
+      value,
+      color: colors[index % colors.length]
+    }));
+
+    setServiceDistribution(distribution);
+  };
+
+  const loadLocationHotspots = async (encounters: any[]) => {
+    const { startDate, endDate } = getDateRange();
+    
+    console.log(`🗺️ Looking for GPS coordinates in ${encounters.length} encounters`);
+    
+    // Check what location fields exist in the data
+    if (encounters.length > 0) {
+      const locationFields = Object.keys(encounters[0]).filter(key => 
+        key.toLowerCase().includes('lat') || 
+        key.toLowerCase().includes('lng') || 
+        key.toLowerCase().includes('coord') ||
+        key.toLowerCase().includes('location') ||
+        key.toLowerCase().includes('address')
+      );
+      console.log('🗺️ Available location fields:', locationFields);
+      console.log('🗺️ Sample encounter location data:', {
+        lat: encounters[0].lat,
+        latitude: encounters[0].latitude,
+        location_lat: encounters[0].location_lat,
+        lng: encounters[0].lng,
+        longitude: encounters[0].longitude,
+        location_lng: encounters[0].location_lng,
+        address: encounters[0].address,
+        location: encounters[0].location
+      });
+    }
+    
+    // Filter encounters by date range and GPS coordinates
+    const filteredEncounters = encounters.filter(encounter => {
+      const encounterDate = encounter.interaction_date || encounter.date || encounter.created_at || encounter.encounter_date || encounter.timestamp;
+      
+      const lat = encounter.lat || encounter.latitude || encounter.location_lat || encounter.gps_lat || encounter.coords_lat;
+      const lng = encounter.lng || encounter.longitude || encounter.location_lng || encounter.gps_lng || encounter.coords_lng;
+      const hasCoords = lat && lng && !isNaN(parseFloat(lat)) && !isNaN(parseFloat(lng));
+      
+      if (!encounterDate) return hasCoords;
+      
+      try {
+        const date = new Date(encounterDate);
+        return date >= new Date(startDate) && date <= new Date(endDate) && hasCoords;
+      } catch (e) {
+        return hasCoords;
+      }
+    });
+    
+    console.log(`🗺️ Found ${filteredEncounters.length} encounters with GPS coordinates`);
+
+    // Group by general area (round coordinates to create zones)
+    const locationCounts: { [key: string]: { count: number; lat: number; lng: number; address?: string } } = {};
+    
+    filteredEncounters.forEach(encounter => {
+      const lat = encounter.lat || encounter.latitude || encounter.location_lat;
+      const lng = encounter.lng || encounter.longitude || encounter.location_lng;
+      const address = encounter.address || encounter.location_address || encounter.location;
+      
+      const roundedLat = Math.round(lat * 1000) / 1000;
+      const roundedLng = Math.round(lng * 1000) / 1000;
+      const locationKey = `${roundedLat},${roundedLng}`;
+      
+      if (!locationCounts[locationKey]) {
+        locationCounts[locationKey] = {
+          count: 0,
+          lat: lat,
+          lng: lng,
+          address: address
+        };
+      }
+      locationCounts[locationKey].count += 1;
+    });
+
+    const hotspots = Object.entries(locationCounts)
+      .sort(([, a], [, b]) => b.count - a.count)
+      .slice(0, 5)
+      .map(([key, data], index) => ({
+        location: data.address || `Location ${index + 1} (${data.lat.toFixed(3)}, ${data.lng.toFixed(3)})`,
+        encounters: data.count,
+        lat: data.lat,
+        lng: data.lng
+      }));
+
+    setLocationHotspots(hotspots);
+  };
+
+  const loadUserProductivity = async (encounters: any[]) => {
+    const { startDate, endDate } = getDateRange();
+    
+    // Filter encounters by date range
+    const filteredEncounters = encounters.filter(encounter => {
+      const encounterDate = encounter.interaction_date || encounter.date || encounter.created_at || encounter.encounter_date || encounter.timestamp;
+      if (!encounterDate) return true; // Include records without dates for now
+      
+      try {
+        const date = new Date(encounterDate);
+        return date >= new Date(startDate) && date <= new Date(endDate);
+      } catch (e) {
+        console.warn('Invalid date in filtering:', encounterDate);
+        return true; // Include records with invalid dates for now
+      }
+    });
+
+    const userStats: { [key: string]: { encounters: number; services: number } } = {};
+    
+    console.log(`👷 Looking for worker names in ${filteredEncounters.length} encounters`);
+    if (filteredEncounters.length > 0) {
+      const workerFields = Object.keys(filteredEncounters[0]).filter(key => 
+        key.toLowerCase().includes('worker') || 
+        key.toLowerCase().includes('staff') || 
+        key.toLowerCase().includes('user') ||
+        key.toLowerCase().includes('employee') ||
+        key.toLowerCase().includes('name')
+      );
+      console.log('👷 Available worker fields:', workerFields);
+    }
+
+    filteredEncounters.forEach(encounter => {
+      const worker = encounter.worker_name || encounter.worker || encounter.staff_name || encounter.user_name || encounter.employee_name || encounter.name || encounter.staff || 'Unknown Worker';
+      
+      if (!userStats[worker]) {
+        userStats[worker] = { encounters: 0, services: 0 };
+      }
+      
+      userStats[worker].encounters += 1;
+      
+      const services = encounter.services_provided || encounter.services || ['General'];
+      const serviceArray = Array.isArray(services) ? services : [services];
+      userStats[worker].services += serviceArray.length;
+    });
+
+    const productivity = Object.entries(userStats)
+      .map(([name, stats]) => ({
+        name: name,
+        encounters: stats.encounters,
+        services: stats.services,
+        efficiency: stats.services / stats.encounters || 0
+      }))
+      .sort((a, b) => b.encounters - a.encounters)
+      .slice(0, 5);
+
+    setUserProductivity(productivity);
+  };
+
+  const loadMonthlyComparison = async (encounters: any[]) => {
+    console.log(`📅 Processing monthly comparison for ${encounters.length} encounters`);
+    
+    // Filter encounters for last 6 months
+    const sixMonthsAgo = subMonths(new Date(), 6);
+    const recentEncounters = encounters.filter(encounter => {
+      const encounterDate = encounter.interaction_date || encounter.date || encounter.created_at || encounter.encounter_date || encounter.timestamp;
+      if (!encounterDate) {
+        console.log('📅 No date field found for monthly comparison');
+        return true; // Include records without dates for now
+      }
+      
+      try {
+        const date = new Date(encounterDate);
+        return date >= sixMonthsAgo;
+      } catch (e) {
+        console.warn('📅 Invalid date in monthly comparison:', encounterDate);
+        return true; // Include records with invalid dates for now
+      }
+    });
+    
+    console.log(`📅 Found ${recentEncounters.length} recent encounters for monthly comparison`);
+
+    const monthlyStats: { [key: string]: { encounters: number; individuals: Set<string>; services: number } } = {};
+    
+    recentEncounters.forEach(encounter => {
+      const encounterDate = encounter.interaction_date || encounter.date || encounter.created_at || encounter.encounter_date || encounter.timestamp;
+      
+      if (!encounterDate) {
+        console.log('No date field in monthly encounter:', Object.keys(encounter));
+        return;
+      }
+      
+      let month;
+      try {
+        const date = new Date(encounterDate);
+        month = format(date, 'MMM yyyy');
+      } catch (e) {
+        console.warn('Invalid date in monthly comparison:', encounterDate);
+        return;
+      }
+      
+      if (!monthlyStats[month]) {
+        monthlyStats[month] = { encounters: 0, individuals: new Set(), services: 0 };
+      }
+      
+      monthlyStats[month].encounters += 1;
+      monthlyStats[month].individuals.add(encounter.client_id || encounter.id || encounter.client_name || encounter.name || 'unknown');
+      
+      const services = encounter.services_provided || encounter.services || ['General'];
+      const serviceArray = Array.isArray(services) ? services : [services];
+      monthlyStats[month].services += serviceArray.length;
+    });
+
+    const comparison = Object.entries(monthlyStats)
+      .sort(([a], [b]) => {
+        // Parse dates for proper chronological sorting
+        const dateA = new Date(a);
+        const dateB = new Date(b);
+        return dateA.getTime() - dateB.getTime();
+      })
+      .slice(-4) // Last 4 months
+      .map(([month, stats]) => ({
+        month: month.split(' ')[0], // Just month name
+        encounters: stats.encounters,
+        individuals: stats.individuals.size,
+        services: stats.services
+      }));
+
+    setMonthlyComparison(comparison);
+  };
+
+  const loadTotalStats = async (encounters: any[]) => {
+    const { startDate, endDate } = getDateRange();
+    
+    // Filter encounters by date range
+    const filteredEncounters = encounters.filter(encounter => {
+      const encounterDate = encounter.interaction_date || encounter.date || encounter.created_at || encounter.encounter_date || encounter.timestamp;
+      if (!encounterDate) return true; // Include records without dates for now
+      
+      try {
+        const date = new Date(encounterDate);
+        return date >= new Date(startDate) && date <= new Date(endDate);
+      } catch (e) {
+        console.warn('Invalid date in filtering:', encounterDate);
+        return true; // Include records with invalid dates for now
+      }
+    });
+
+    // Count unique individuals
+    const uniqueIndividuals = new Set();
+    let totalServicesCount = 0;
+    
+    filteredEncounters.forEach(encounter => {
+      // Count unique individuals
+      const individualId = encounter.client_id || encounter.id || encounter.client_name || encounter.name;
+      if (individualId) {
+        uniqueIndividuals.add(individualId);
+      }
+      
+      // Count services
+      const services = encounter.services_provided || encounter.services || ['General'];
+      const serviceArray = Array.isArray(services) ? services : [services];
+      totalServicesCount += serviceArray.length;
+    });
+
+    // Get total clients from localStorage for active clients count
+    let totalActiveClients = 0;
+    try {
+      console.log('🔍 Looking for client count in localStorage...');
+      const possibleClientKeys = ['clients', 'clientEncounters', 'activeClients', 'clientData'];
+      
+      for (const key of possibleClientKeys) {
+        const clientsData = localStorage.getItem(key);
+        if (clientsData) {
+          const clients = JSON.parse(clientsData);
+          if (Array.isArray(clients)) {
+            totalActiveClients = clients.length;
+            console.log(`📊 Found ${totalActiveClients} clients in localStorage key: ${key}`);
+            break;
+          }
+        }
+      }
+      
+      if (totalActiveClients === 0) {
+        console.log('⚠️ No client data found in localStorage');
+      }
+    } catch (error) {
+      console.warn('Could not load clients count from localStorage:', error);
+    }
+
+    setTotalStats({
+      totalEncounters: filteredEncounters.length,
+      totalIndividuals: uniqueIndividuals.size,
+      totalServices: totalServicesCount,
+      activeClients: totalActiveClients
+    });
+  };
 
   const handleExportReport = () => {
     const reportData = {
       timeRange,
       generatedAt: new Date().toISOString(),
-      totalEncounters: encounterTrends.reduce((sum, item) => sum + item.encounters, 0),
-      totalIndividuals: encounterTrends.reduce((sum, item) => sum + item.individuals, 0),
-      totalServices: encounterTrends.reduce((sum, item) => sum + item.services, 0),
+      totalStats,
+      encounterTrends,
+      serviceDistribution,
+      locationHotspots,
+      userProductivity,
+      monthlyComparison,
     };
 
     const dataStr = JSON.stringify(reportData, null, 2);
@@ -107,6 +685,32 @@ const ReportsAndAnalytics: React.FC = () => {
     linkElement.click();
   };
 
+  const handleTimeRangeChange = (event: SelectChangeEvent) => {
+    setTimeRange(event.target.value);
+  };
+
+  if (loading) {
+    return (
+      <Box sx={{ p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+        <CircularProgress size={60} />
+        <Typography variant="h6" sx={{ ml: 2 }}>Loading analytics data...</Typography>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+        <Button variant="contained" onClick={loadAnalyticsData}>
+          Retry
+        </Button>
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -116,7 +720,8 @@ const ReportsAndAnalytics: React.FC = () => {
             <InputLabel>Time Range</InputLabel>
             <Select
               value={timeRange}
-              onChange={(e) => setTimeRange(e.target.value)}
+              onChange={handleTimeRangeChange}
+              label="Time Range"
             >
               <MenuItem value="7">Last 7 Days</MenuItem>
               <MenuItem value="30">Last 30 Days</MenuItem>
@@ -142,51 +747,54 @@ const ReportsAndAnalytics: React.FC = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Assessment color="primary" fontSize="large" />
                 <Box>
-                  <Typography variant="h4">847</Typography>
+                  <Typography variant="h4">{totalStats.totalEncounters}</Typography>
                   <Typography color="text.secondary">Total Encounters</Typography>
-                  <Typography variant="body2" color="success.main">+12% vs last month</Typography>
+                  <Chip label={`Last ${timeRange} days`} size="small" />
                 </Box>
               </Box>
             </CardContent>
           </Card>
         </Box>
+
         <Box sx={{ flex: '1 1 250px', minWidth: '250px' }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <People color="success" fontSize="large" />
+                <People color="secondary" fontSize="large" />
                 <Box>
-                  <Typography variant="h4">1,243</Typography>
-                  <Typography color="text.secondary">Individuals Helped</Typography>
-                  <Typography variant="body2" color="success.main">+18% vs last month</Typography>
+                  <Typography variant="h4">{totalStats.totalIndividuals}</Typography>
+                  <Typography color="text.secondary">Individuals Served</Typography>
+                  <Chip label={`Last ${timeRange} days`} size="small" />
                 </Box>
               </Box>
             </CardContent>
           </Card>
         </Box>
+
         <Box sx={{ flex: '1 1 250px', minWidth: '250px' }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <LocalHospital color="warning" fontSize="large" />
+                <LocalHospital color="success" fontSize="large" />
                 <Box>
-                  <Typography variant="h4">1,876</Typography>
+                  <Typography variant="h4">{totalStats.totalServices}</Typography>
                   <Typography color="text.secondary">Services Provided</Typography>
-                  <Typography variant="body2" color="success.main">+8% vs last month</Typography>
+                  <Chip label={`Last ${timeRange} days`} size="small" />
                 </Box>
               </Box>
             </CardContent>
           </Card>
         </Box>
+
         <Box sx={{ flex: '1 1 250px', minWidth: '250px' }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Group color="info" fontSize="large" />
                 <Box>
-                  <Typography variant="h4">24</Typography>
-                  <Typography color="text.secondary">Active Workers</Typography>
-                  <Typography variant="body2" color="text.secondary">Avg 35.3 enc/worker</Typography>
+                  <Typography variant="h4">{totalStats.activeClients}</Typography>
+                  <Typography color="text.secondary">Total Clients</Typography>
+                  <Chip label="Database total" size="small" />
                 </Box>
               </Box>
             </CardContent>
@@ -194,13 +802,14 @@ const ReportsAndAnalytics: React.FC = () => {
         </Box>
       </Box>
 
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, mb: 3 }}>
-        {/* Encounter Trends Chart */}
-        <Box sx={{ flex: '2 1 500px', minWidth: '500px' }}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Daily Encounter Trends
-            </Typography>
+      {/* Charts */}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+        {/* Encounter Trends */}
+        <Paper sx={{ flex: '1 1 600px', p: 3, minWidth: '600px' }}>
+          <Typography variant="h6" gutterBottom>
+            Daily Encounter Trends
+          </Typography>
+          {encounterTrends.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={encounterTrends}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -208,20 +817,24 @@ const ReportsAndAnalytics: React.FC = () => {
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Line type="monotone" dataKey="encounters" stroke="#8884d8" strokeWidth={2} />
-                <Line type="monotone" dataKey="individuals" stroke="#82ca9d" strokeWidth={2} />
-                <Line type="monotone" dataKey="services" stroke="#ffc658" strokeWidth={2} />
+                <Line type="monotone" dataKey="encounters" stroke="#8884d8" name="Encounters" />
+                <Line type="monotone" dataKey="individuals" stroke="#82ca9d" name="Individuals" />
+                <Line type="monotone" dataKey="services" stroke="#ffc658" name="Services" />
               </LineChart>
             </ResponsiveContainer>
-          </Paper>
-        </Box>
+          ) : (
+            <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Typography color="text.secondary">No encounter data available</Typography>
+            </Box>
+          )}
+        </Paper>
 
         {/* Service Distribution */}
-        <Box sx={{ flex: '1 1 300px', minWidth: '300px' }}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Service Distribution
-            </Typography>
+        <Paper sx={{ flex: '1 1 400px', p: 3, minWidth: '400px' }}>
+          <Typography variant="h6" gutterBottom>
+            Service Distribution
+          </Typography>
+          {serviceDistribution.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -229,7 +842,7 @@ const ReportsAndAnalytics: React.FC = () => {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ name, percent = 0 }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }) => `${name} ${percent ? (percent * 100).toFixed(0) : 0}%`}
                   outerRadius={80}
                   fill="#8884d8"
                   dataKey="value"
@@ -241,20 +854,22 @@ const ReportsAndAnalytics: React.FC = () => {
                 <Tooltip />
               </PieChart>
             </ResponsiveContainer>
-          </Paper>
-        </Box>
-      </Box>
+          ) : (
+            <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Typography color="text.secondary">No service data available</Typography>
+            </Box>
+          )}
+        </Paper>
 
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, mb: 3 }}>
         {/* Location Hotspots */}
-        <Box sx={{ flex: '1 1 400px', minWidth: '400px' }}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Top Encounter Locations
-            </Typography>
+        <Paper sx={{ flex: '1 1 400px', p: 3, minWidth: '400px' }}>
+          <Typography variant="h6" gutterBottom>
+            Location Hotspots
+          </Typography>
+          {locationHotspots.length > 0 ? (
             <List>
               {locationHotspots.map((location, index) => (
-                <ListItem key={location.location}>
+                <ListItem key={index}>
                   <ListItemIcon>
                     <LocationOn color="primary" />
                   </ListItemIcon>
@@ -262,56 +877,64 @@ const ReportsAndAnalytics: React.FC = () => {
                     primary={location.location}
                     secondary={`${location.encounters} encounters`}
                   />
-                  <Chip
-                    label={`#${index + 1}`}
-                    color={index < 3 ? 'primary' : 'default'}
-                    size="small"
-                  />
+                  <Chip label={location.encounters} color="primary" size="small" />
                 </ListItem>
               ))}
             </List>
-          </Paper>
-        </Box>
+          ) : (
+            <Box sx={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Typography color="text.secondary">No location data available</Typography>
+            </Box>
+          )}
+        </Paper>
 
         {/* User Productivity */}
-        <Box sx={{ flex: '1 1 400px', minWidth: '400px' }}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Team Productivity
-            </Typography>
-            <ResponsiveContainer width="100%" height={250}>
+        <Paper sx={{ flex: '1 1 400px', p: 3, minWidth: '400px' }}>
+          <Typography variant="h6" gutterBottom>
+            Worker Productivity
+          </Typography>
+          {userProductivity.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
               <BarChart data={userProductivity}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="encounters" fill="#8884d8" />
-                <Bar dataKey="services" fill="#82ca9d" />
+                <Bar dataKey="encounters" fill="#8884d8" name="Encounters" />
+                <Bar dataKey="services" fill="#82ca9d" name="Services" />
               </BarChart>
             </ResponsiveContainer>
-          </Paper>
-        </Box>
-      </Box>
+          ) : (
+            <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Typography color="text.secondary">No worker data available</Typography>
+            </Box>
+          )}
+        </Paper>
 
-      {/* Monthly Comparison */}
-      <Box sx={{ width: '100%' }}>
-        <Paper sx={{ p: 3 }}>
+        {/* Monthly Comparison */}
+        <Paper sx={{ flex: '1 1 600px', p: 3, minWidth: '600px' }}>
           <Typography variant="h6" gutterBottom>
-            Monthly Performance Comparison
+            Monthly Comparison
           </Typography>
-          <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={monthlyComparison}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Area type="monotone" dataKey="encounters" stackId="1" stroke="#8884d8" fill="#8884d8" />
-              <Area type="monotone" dataKey="individuals" stackId="1" stroke="#82ca9d" fill="#82ca9d" />
-              <Area type="monotone" dataKey="services" stackId="1" stroke="#ffc658" fill="#ffc658" />
-            </AreaChart>
-          </ResponsiveContainer>
+          {monthlyComparison.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={monthlyComparison}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Area type="monotone" dataKey="encounters" stackId="1" stroke="#8884d8" fill="#8884d8" />
+                <Area type="monotone" dataKey="individuals" stackId="1" stroke="#82ca9d" fill="#82ca9d" />
+                <Area type="monotone" dataKey="services" stackId="1" stroke="#ffc658" fill="#ffc658" />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Typography color="text.secondary">No monthly data available</Typography>
+            </Box>
+          )}
         </Paper>
       </Box>
     </Box>

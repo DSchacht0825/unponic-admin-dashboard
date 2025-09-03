@@ -31,8 +31,12 @@ import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
   Add as AddIcon,
+  MyLocation as LocationIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
+import InteractionLogger from './InteractionLogger';
+import InteractionHistory from './InteractionHistory';
+import { useInteractions } from '../hooks/useInteractions';
 
 interface ClientNote {
   id: string;
@@ -49,12 +53,16 @@ const ClientManagement: React.FC = () => {
   const [selectedClient, setSelectedClient] = useState<SupabaseClient | null>(null);
   const [expandedClient, setExpandedClient] = useState<string | null>(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
+  const [interactionLoggerOpen, setInteractionLoggerOpen] = useState(false);
   const [viewProfile, setViewProfile] = useState<SupabaseClient | null>(null);
   const [newNote, setNewNote] = useState({
     note: '',
     category: 'general' as ClientNote['category'],
   });
   const [filteredClients, setFilteredClients] = useState<SupabaseClient[]>([]);
+  
+  // Interactions hook for the currently viewed client
+  const { interactions, fetchInteractions } = useInteractions(viewProfile?.id);
 
   // Handle search with debouncing
   useEffect(() => {
@@ -131,21 +139,62 @@ const ClientManagement: React.FC = () => {
         <Button onClick={() => setViewProfile(null)} sx={{ mb: 2 }}>
           ← Back to Client List
         </Button>
-        <Paper sx={{ p: 3 }}>
-          <Typography variant="h5" gutterBottom>
-            {viewProfile.first_name} {viewProfile.last_name}
-          </Typography>
-          <Typography variant="body1">
-            Detailed profile view coming soon...
-          </Typography>
-          {/* Temporary client details display */}
-          <Box sx={{ mt: 2 }}>
-            {viewProfile.aka && <Typography><strong>AKA:</strong> {viewProfile.aka}</Typography>}
-            {viewProfile.age && <Typography><strong>Age:</strong> {viewProfile.age}</Typography>}
-            {viewProfile.gender && <Typography><strong>Gender:</strong> {viewProfile.gender}</Typography>}
-            {viewProfile.ethnicity && <Typography><strong>Ethnicity:</strong> {viewProfile.ethnicity}</Typography>}
-          </Box>
-        </Paper>
+        <Stack spacing={3}>
+          <Paper sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+              <Typography variant="h5">
+                {viewProfile.first_name} {viewProfile.last_name}
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<LocationIcon />}
+                onClick={() => {
+                  setSelectedClient(viewProfile);
+                  // Use setTimeout to ensure selectedClient is set first
+                  setTimeout(() => setInteractionLoggerOpen(true), 0);
+                }}
+              >
+                Log Interaction
+              </Button>
+            </Box>
+            
+            {/* Client details display */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+              {viewProfile.aka && <Typography><strong>AKA:</strong> {viewProfile.aka}</Typography>}
+              {viewProfile.age && <Typography><strong>Age:</strong> {viewProfile.age}</Typography>}
+              {viewProfile.gender && <Typography><strong>Gender:</strong> {viewProfile.gender}</Typography>}
+              {viewProfile.ethnicity && <Typography><strong>Ethnicity:</strong> {viewProfile.ethnicity}</Typography>}
+              {viewProfile.height && <Typography><strong>Height:</strong> {viewProfile.height}</Typography>}
+              {viewProfile.weight && <Typography><strong>Weight:</strong> {viewProfile.weight}</Typography>}
+              {viewProfile.hair && <Typography><strong>Hair:</strong> {viewProfile.hair}</Typography>}
+              {viewProfile.eyes && <Typography><strong>Eyes:</strong> {viewProfile.eyes}</Typography>}
+            </Box>
+            
+            {viewProfile.notes && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Legacy Notes:
+                </Typography>
+                <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
+                    {viewProfile.notes}
+                  </Typography>
+                </Paper>
+              </Box>
+            )}
+          </Paper>
+
+          <Paper sx={{ p: 3 }}>
+            <InteractionHistory 
+              interactions={interactions}
+              loading={false}
+              onShowOnMap={(interaction) => {
+                console.log('Show interaction on map:', interaction);
+                // TODO: Implement map integration
+              }}
+            />
+          </Paper>
+        </Stack>
       </Box>
     );
   }
@@ -274,8 +323,21 @@ const ClientManagement: React.FC = () => {
                         setSelectedClient(client);
                         setNoteDialogOpen(true);
                       }}
+                      title="Add simple note"
                     >
                       <AddIcon />
+                    </IconButton>
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedClient(client);
+                        // Use setTimeout to ensure selectedClient is set first
+                        setTimeout(() => setInteractionLoggerOpen(true), 0);
+                      }}
+                      title="Log GPS interaction"
+                      color="primary"
+                    >
+                      <LocationIcon />
                     </IconButton>
                     <IconButton
                       onClick={(e) => {
@@ -421,6 +483,24 @@ const ClientManagement: React.FC = () => {
           <Button onClick={handleAddNote} variant="contained">Add Note</Button>
         </DialogActions>
       </Dialog>
+
+      {/* GPS Interaction Logger */}
+      {selectedClient && (
+        <InteractionLogger
+          client={selectedClient}
+          open={interactionLoggerOpen}
+          onClose={() => {
+            setInteractionLoggerOpen(false);
+            setSelectedClient(null);
+          }}
+          onInteractionAdded={() => {
+            // Refresh interactions after adding one
+            if (selectedClient) {
+              fetchInteractions(selectedClient.id);
+            }
+          }}
+        />
+      )}
     </Box>
   );
 };

@@ -7,10 +7,11 @@
     "@emotion/styled": "^11.14.1",
     "@hookform/resolvers": "^5.2.1",
     "@mui/icons-material": "^7.3.1",
+    "@mui/lab": "^7.0.0-beta.17",
     "@mui/material": "^7.3.1",
     "@mui/x-charts": "^8.10.2",
     "@mui/x-data-grid": "^8.10.2",
-    "@mui/x-date-pickers": "^8.10.2",
+    "@mui/x-date-pickers": "^8.11.0",
     "@supabase/supabase-js": "^2.57.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.8.0",
@@ -23,6 +24,7 @@
     "@types/react-dom": "^19.1.8",
     "axios": "^1.11.0",
     "date-fns": "^4.1.0",
+    "file-saver": "^2.0.5",
     "leaflet": "^1.9.4",
     "leaflet.heat": "^0.2.0",
     "react": "^19.1.1",
@@ -60,5 +62,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "@types/file-saver": "^2.0.7"
   }
 }

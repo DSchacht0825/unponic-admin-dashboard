@@ -74,14 +74,61 @@ const HeatLayer: React.FC<{ encounters: EncounterData[] }> = ({ encounters }) =>
   return null;
 };
 
+// Vista, CA + Unincorporated Vista Areas - EXPANDED 20-POINT BOUNDARY
+// Includes city limits + unincorporated communities with Vista addresses
+// Vista Center: 33.2000, -117.2425 | Vista GPS: 33.201118, -117.244362
+// Expanded to include: Buena Creek, Shadowridge, parts of Bonsall, Rainbow areas
+const vistaPoints = [
+  { lat: 33.2580, lng: -117.3150 }, // Point 1: Extended north (Bonsall unincorporated)
+  { lat: 33.2520, lng: -117.2890 }, // Point 2: Northeast expansion
+  { lat: 33.2470, lng: -117.2630 }, // Point 3: Northeast toward unincorporated San Marcos areas
+  { lat: 33.2410, lng: -117.2370 }, // Point 4: East-northeast expansion
+  { lat: 33.2340, lng: -117.2110 }, // Point 5: Extended east boundary
+  { lat: 33.2250, lng: -117.1850 }, // Point 6: East expansion toward Escondido
+  { lat: 33.2140, lng: -117.1590 }, // Point 7: Southeast expansion
+  { lat: 33.2010, lng: -117.1330 }, // Point 8: Extended southeast boundary
+  { lat: 33.1860, lng: -117.1270 }, // Point 9: Southeast corner expansion
+  { lat: 33.1690, lng: -117.1410 }, // Point 10: South boundary expansion
+  { lat: 33.1500, lng: -117.1650 }, // Point 11: Extended south boundary
+  { lat: 33.1290, lng: -117.1990 }, // Point 12: South-central expansion
+  { lat: 33.1160, lng: -117.2430 }, // Point 13: Extended south (unincorporated Encinitas areas)
+  { lat: 33.1220, lng: -117.2870 }, // Point 14: Southwest expansion
+  { lat: 33.1380, lng: -117.3210 }, // Point 15: West-southwest expansion
+  { lat: 33.1640, lng: -117.3450 }, // Point 16: Extended west boundary
+  { lat: 33.1980, lng: -117.3690 }, // Point 17: West expansion toward Oceanside
+  { lat: 33.2420, lng: -117.3830 }, // Point 18: Extended northwest boundary
+  { lat: 33.2610, lng: -117.3650 }, // Point 19: Northwest corner expansion (Rainbow area)
+  { lat: 33.2650, lng: -117.3400 }  // Point 20: North-northwest expansion closing
+];
+
+// Create Vista polygon coordinates (closing the shape by returning to first point)
+const vistaPolygon: [number, number][] = [
+  ...vistaPoints.map(point => [point.lat, point.lng] as [number, number]),
+  [vistaPoints[0].lat, vistaPoints[0].lng] // Close the polygon
+];
+
 // ERF3 boundary coordinates
 const erf3Points = [
-  { name: 'Emerald Dr & Vista Village Dr', lat: 33.2015, lng: -117.248 },
-  { name: 'Vista Village Dr & Civic Center Dr', lat: 33.1995, lng: -117.242 },
-  { name: 'Civic Center Dr & Mar Vista Dr', lat: 33.1965, lng: -117.238 },
-  { name: 'Mar Vista Dr & Melrose Dr', lat: 33.195, lng: -117.236 },
-  { name: 'Melrose Dr & Sycamore Ave & Hwy 78', lat: 33.192, lng: -117.24 },
-  { name: 'Hwy 78 & Emerald Dr', lat: 33.198, lng: -117.2495 },
+  { name: 'ERF3 Point 1', lat: 33.183536, lng: -117.278574 },
+  { name: 'ERF3 Point 2', lat: 33.195840, lng: -117.282195 },
+  { name: 'ERF3 Point 3', lat: 33.205066, lng: -117.279222 },
+  { name: 'ERF3 Point 4', lat: 33.205157, lng: -117.249169 },
+  { name: 'ERF3 Point 5', lat: 33.211941, lng: -117.245170 },
+  { name: 'ERF3 Point 6', lat: 33.209453, lng: -117.226738 },
+  { name: 'ERF3 Point 7', lat: 33.192674, lng: -117.229549 },
+  { name: 'ERF3 Point 8', lat: 33.185300, lng: -117.223224 },
+  { name: 'ERF3 Point 9', lat: 33.175031, lng: -117.209117 },
+  { name: 'ERF3 Point 10', lat: 33.161820, lng: -117.204306 },
+  { name: 'ERF3 Point 11', lat: 33.153946, lng: -117.208576 },
+  { name: 'ERF3 Point 12', lat: 33.157249, lng: -117.217008 },
+  { name: 'ERF3 Point 13', lat: 33.154715, lng: -117.221441 },
+  { name: 'ERF3 Point 14', lat: 33.156616, lng: -117.229657 },
+  { name: 'ERF3 Point 15', lat: 33.167023, lng: -117.222522 },
+  { name: 'ERF3 Point 16', lat: 33.180641, lng: -117.240629 },
+  { name: 'ERF3 Point 17', lat: 33.186476, lng: -117.248953 },
+  { name: 'ERF3 Point 18', lat: 33.187653, lng: -117.256737 },
+  { name: 'ERF3 Point 19', lat: 33.187200, lng: -117.268736 },
+  { name: 'ERF3 Point 20', lat: 33.183762, lng: -117.276358 },
 ];
 
 // Create polygon coordinates (closing the shape by returning to first point)
@@ -305,6 +352,7 @@ const VistaHeatMap: React.FC = () => {
   };
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [showVista, setShowVista] = useState(true);
   const [showErf3, setShowErf3] = useState(true);
   const [showPins, setShowPins] = useState(true);
   const [showHeatMap, setShowHeatMap] = useState(true);
@@ -444,6 +492,16 @@ const VistaHeatMap: React.FC = () => {
         <FormControlLabel
           control={
             <Checkbox
+              checked={showVista}
+              onChange={(e) => setShowVista(e.target.checked)}
+              size="small"
+            />
+          }
+          label="Show Vista Boundary"
+        />
+        <FormControlLabel
+          control={
+            <Checkbox
               checked={showErf3}
               onChange={(e) => setShowErf3(e.target.checked)}
               size="small"
@@ -512,6 +570,33 @@ const VistaHeatMap: React.FC = () => {
                 </Popup>
               </Marker>
             ))}
+            
+            {/* Vista City Boundary */}
+            {showVista && (
+              <Polygon
+                positions={vistaPolygon}
+                pathOptions={{
+                  color: '#4CAF50',
+                  weight: 2,
+                  opacity: 0.7,
+                  fillColor: '#4CAF50',
+                  fillOpacity: 0.05,
+                  dashArray: '5, 5'
+                }}
+              >
+                <Popup>
+                  <div>
+                    <strong>Vista, CA + Unincorporated Areas</strong>
+                    <br />
+                    City limits + unincorporated communities
+                    <br />
+                    Includes: Buena Creek, Shadowridge, parts of Bonsall & Rainbow
+                    <br />
+                    Total Encounters: {encounters.length}
+                  </div>
+                </Popup>
+              </Polygon>
+            )}
             
             {showErf3 && (
               <>

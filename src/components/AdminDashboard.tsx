@@ -33,6 +33,7 @@ import {
   ManageAccounts,
   Upload,
   MergeType,
+  FileDownload,
 } from '@mui/icons-material';
 import UserManagement from './UserManagement';
 import ReportsAndAnalytics from './ReportsAndAnalytics';
@@ -42,6 +43,7 @@ import ClientManagement from './ClientManagement';
 import ClientImporter from './ClientImporter';
 import DataMigration from './DataMigration';
 import DuplicateManager from './DuplicateManager';
+import DataExporter from './DataExporter';
 
 const drawerWidth = 240;
 
@@ -65,6 +67,7 @@ const AdminDashboard: React.FC = () => {
     { text: 'Client Intake', icon: <PersonAdd />, component: ClientProfileForm },
     { text: 'Duplicate Detection', icon: <MergeType />, component: DuplicateManager },
     { text: 'Import Clients', icon: <Upload />, component: ClientImporter },
+    { text: 'Data Export', icon: <FileDownload />, component: DataExporter },
     { text: 'Data Migration', icon: <Dashboard />, component: DataMigration },
     { text: 'User Management', icon: <People />, component: UserManagement },
     { text: 'Reports & Analytics', icon: <Assessment />, component: ReportsAndAnalytics },
