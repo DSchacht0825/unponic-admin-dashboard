@@ -136,7 +136,8 @@ const ReportsAndAnalytics: React.FC = () => {
                 original_date: parsed[0].original_date,
                 service_date: parsed[0].service_date
               });
-              allEncounters = [...allEncounters, ...parsed];
+              // Deep copy parsed data to ensure isolation
+              allEncounters = JSON.parse(JSON.stringify([...allEncounters, ...parsed]));
               foundData = true;
               break;
             }
@@ -162,7 +163,8 @@ const ReportsAndAnalytics: React.FC = () => {
           
         if (!error && supabaseInteractions) {
           console.log(`📊 Loaded ${supabaseInteractions.length} interactions from Supabase`);
-          allEncounters = [...allEncounters, ...supabaseInteractions];
+          // Deep copy to ensure isolation
+          allEncounters = JSON.parse(JSON.stringify([...allEncounters, ...supabaseInteractions]));
         }
       } catch (supabaseError) {
         console.warn('Supabase data loading failed:', supabaseError);
@@ -189,13 +191,16 @@ const ReportsAndAnalytics: React.FC = () => {
           // SIMPLIFIED CLIENT TO ENCOUNTER CONVERSION
           const clientAsEncounters: any[] = [];
           
-          clientsWithContacts.forEach(client => {
+          // Use map instead of forEach to create completely new data
+          const generatedEncounters = clientsWithContacts.flatMap(client => {
             // Create encounters based on contact count
             const contactCount = client.contacts || 1;
             
             // Get current time range safely
             const currentTimeRange = parseInt(timeRange) || 90;
             console.log(`📅 Generating encounters for time range: ${currentTimeRange} days`);
+            
+            const encounters = [];
             
             for (let i = 0; i < contactCount; i++) {
               // Generate dates within the selected time range dynamically
@@ -224,45 +229,47 @@ const ReportsAndAnalytics: React.FC = () => {
               
               console.log(`✅ Generated encounter ${i + 1}/${contactCount} for ${client.first_name}: ${dateString} (${daysBack}/${maxDaysBack} days back, range=${currentTimeRange})`);  
               
-              // Determine services based on client data and contact number
-              const services = [];
-              if (i === 0) services.push('Initial Contact');
-              if (client.contacts > 1) services.push('Follow-up Contact');
-              if (client.notes && client.notes.toLowerCase().includes('food')) services.push('Food Services');
-              if (client.notes && client.notes.toLowerCase().includes('housing')) services.push('Housing Services');
-              if (client.notes && client.notes.toLowerCase().includes('medical')) services.push('Medical Services');
-              if (client.notes && client.notes.toLowerCase().includes('mental')) services.push('Mental Health Services');
+              // Create fresh service array for each encounter
+              const serviceList = [];
+              if (i === 0) serviceList.push('Initial Contact');
+              if (client.contacts > 1) serviceList.push('Follow-up Contact');
+              if (client.notes && client.notes.toLowerCase().includes('food')) serviceList.push('Food Services');
+              if (client.notes && client.notes.toLowerCase().includes('housing')) serviceList.push('Housing Services');
+              if (client.notes && client.notes.toLowerCase().includes('medical')) serviceList.push('Medical Services');
+              if (client.notes && client.notes.toLowerCase().includes('mental')) serviceList.push('Mental Health Services');
               
               // Default service if none found
-              if (services.length === 0) services.push('General Contact');
+              if (serviceList.length === 0) serviceList.push('General Contact');
               
-              // Create a completely new encounter object with copied arrays to prevent readonly errors
-              const encounterObj = {
+              // Create a completely isolated encounter object
+              encounters.push({
                 id: `client-${client.id}-contact-${i + 1}`,
-                client_id: client.id,
-                client_name: `${client.first_name} ${client.last_name}`.trim(),
-                interaction_date: dateString,
-                encounter_date: dateString,
-                date: dateString,
-                created_at: dateString,
-                timestamp: dateString,
+                client_id: String(client.id),
+                client_name: `${client.first_name || ''} ${client.last_name || ''}`.trim(),
+                interaction_date: String(dateString),
+                encounter_date: String(dateString),
+                date: String(dateString),
+                created_at: String(dateString),
+                timestamp: String(dateString),
                 worker_name: 'Data Import',
                 worker: 'Data Import',
-                services_provided: [...services], // Create a new array copy
-                services: [...services], // Create a new array copy
-                service_type: services[0],
-                notes: `Client: ${client.first_name} ${client.last_name} - Contact ${i + 1} of ${contactCount}`,
+                services_provided: JSON.parse(JSON.stringify(serviceList)), // Deep copy
+                services: JSON.parse(JSON.stringify(serviceList)), // Deep copy
+                service_type: String(serviceList[0]),
+                notes: `Client: ${client.first_name || ''} ${client.last_name || ''} - Contact ${i + 1} of ${contactCount}`,
                 location_lat: null,
                 location_lng: null,
-                contact_count: contactCount,
-                encounter_number: i + 1,
+                contact_count: Number(contactCount),
+                encounter_number: Number(i + 1),
                 source: 'imported_client_data'
-              };
-              
-              // Push the encounter object without sealing/freezing it
-              clientAsEncounters.push(encounterObj);
+              });
             }
+            
+            return encounters;
           });
+          
+          // Add all generated encounters
+          clientAsEncounters.push(...generatedEncounters);
           
           console.log(`📈 GENERATED ${clientAsEncounters.length} ENCOUNTERS from ${clientsWithContacts.length} clients for ${timeRange}-day range`);
           console.log('📊 Sample encounters with dates:', clientAsEncounters.slice(0, 5).map(e => ({
@@ -281,7 +288,8 @@ const ReportsAndAnalytics: React.FC = () => {
           });
           console.log('📅 Date distribution:', Object.keys(dateCounts).length, 'unique dates');
           
-          allEncounters = [...allEncounters, ...clientAsEncounters];
+          // Deep copy to ensure complete isolation
+          allEncounters = JSON.parse(JSON.stringify([...allEncounters, ...clientAsEncounters]));
         } else {
           console.error('❌ NO CLIENT DATA FOUND OR ERROR:', clientError);
         }
