@@ -1,11 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = (process.env.REACT_APP_SUPABASE_URL || 'https://cedpadbflumqvuwfhxoz.supabase.co').replace(/\/$/, '')
-const supabaseAnonKey = (process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlZHBhZGJmbHVtcXZ1d2ZoeG96Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4MjIwMzgsImV4cCI6MjA3MjM5ODAzOH0.KpCzOB4YPLYGFyIzjqf4FUTXKbTkONoViUbMzUq-zUA').trim()
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables')
-}
+// Use hardcoded values to avoid environment variable issues in Vercel
+const supabaseUrl = 'https://cedpadbflumqvuwfhxoz.supabase.co'
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlZHBhZGJmbHVtcXZ1d2ZoeG96Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4MjIwMzgsImV4cCI6MjA3MjM5ODAzOH0.KpCzOB4YPLYGFyIzjqf4FUTXKbTkONoViUbMzUq-zUA'
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
