@@ -26,7 +26,8 @@ import {
   Search as SearchIcon,
   Person as PersonIcon,
   Edit as EditIcon,
-  LocationOn as LocationIcon
+  LocationOn as LocationIcon,
+  ContentCopy as CopyIcon
 } from '@mui/icons-material';
 import { supabase, Client } from '../lib/supabase';
 
@@ -52,6 +53,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ user, onSwitchToInt
   });
   const [savingInteraction, setSavingInteraction] = useState(false);
   const [interactions, setInteractions] = useState<any[]>([]);
+  const [copySuccess, setCopySuccess] = useState('');
 
   useEffect(() => {
     loadClients();
@@ -94,6 +96,57 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ user, onSwitchToInt
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setSelectedClient(null);
+  };
+
+  const copyClientInfo = async (client: Client) => {
+    const clientInfo = `
+Client Information:
+Name: ${client.first_name} ${client.middle || ''} ${client.last_name}
+${client.aka ? `AKA: ${client.aka}` : ''}
+Gender: ${client.gender || 'Not specified'}
+Ethnicity: ${client.ethnicity || 'Not specified'}
+Age: ${client.age || 'Not specified'}
+Height: ${client.height || 'Not specified'}
+Weight: ${client.weight || 'Not specified'}
+Hair: ${client.hair || 'Not specified'}
+Eyes: ${client.eyes || 'Not specified'}
+Description: ${client.description || 'None'}
+Notes: ${client.notes || 'None'}
+Last Contact: ${client.last_contact ? formatDate(client.last_contact) : 'Never'}
+Total Contacts: ${client.contacts || 0}
+Date Added: ${client.created_at ? formatDate(client.created_at) : formatDate(client.date_created)}
+    `.trim();
+
+    try {
+      await navigator.clipboard.writeText(clientInfo);
+      setCopySuccess('Client info copied to clipboard!');
+      setTimeout(() => setCopySuccess(''), 3000);
+    } catch (err) {
+      setCopySuccess('Failed to copy - please select and copy manually');
+      setTimeout(() => setCopySuccess(''), 3000);
+    }
+  };
+
+  const copyInteractionNotes = async (interaction: any) => {
+    const interactionText = `
+Interaction - ${formatDate(interaction.interaction_date)}
+Worker: ${interaction.worker_name}
+Type: ${interaction.interaction_type}
+Location: ${interaction.location_lat && interaction.location_lng ? 
+  `${interaction.location_lat.toFixed(6)}, ${interaction.location_lng.toFixed(6)}` : 'Not recorded'}
+
+Notes:
+${interaction.notes}
+    `.trim();
+
+    try {
+      await navigator.clipboard.writeText(interactionText);
+      setCopySuccess('Interaction notes copied to clipboard!');
+      setTimeout(() => setCopySuccess(''), 3000);
+    } catch (err) {
+      setCopySuccess('Failed to copy - please select and copy manually');
+      setTimeout(() => setCopySuccess(''), 3000);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -343,10 +396,25 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ user, onSwitchToInt
         maxWidth="sm"
         fullScreen={window.innerWidth < 600} // Full screen on mobile
       >
-        <DialogTitle>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           Client Details
+          {selectedClient && (
+            <IconButton
+              onClick={() => copyClientInfo(selectedClient)}
+              color="primary"
+              size="small"
+              title="Copy client information"
+            >
+              <CopyIcon />
+            </IconButton>
+          )}
         </DialogTitle>
         <DialogContent>
+          {copySuccess && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              {copySuccess}
+            </Alert>
+          )}
           {selectedClient && (
             <Box sx={{ pt: 1 }}>
               <Typography variant="h6" gutterBottom>
@@ -427,15 +495,27 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ user, onSwitchToInt
                       {interactions.slice(0, 3).map((interaction, index) => (
                         <Card key={index} sx={{ mb: 1, bgcolor: 'grey.50' }}>
                           <CardContent sx={{ py: 1, px: 2 }}>
-                            <Typography variant="subtitle2" color="primary">
-                              {interaction.interaction_type}
-                            </Typography>
-                            <Typography variant="body2" sx={{ mb: 0.5 }}>
-                              {interaction.notes}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {formatDate(interaction.interaction_date)} • {interaction.worker_name}
-                            </Typography>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <Box sx={{ flex: 1 }}>
+                                <Typography variant="subtitle2" color="primary">
+                                  {interaction.interaction_type}
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 0.5 }}>
+                                  {interaction.notes}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {formatDate(interaction.interaction_date)} • {interaction.worker_name}
+                                </Typography>
+                              </Box>
+                              <IconButton
+                                size="small"
+                                onClick={() => copyInteractionNotes(interaction)}
+                                title="Copy interaction notes"
+                                sx={{ ml: 1 }}
+                              >
+                                <CopyIcon fontSize="small" />
+                              </IconButton>
+                            </Box>
                           </CardContent>
                         </Card>
                       ))}
@@ -542,15 +622,27 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ user, onSwitchToInt
                 {interactions.slice(0, 5).map((interaction, index) => (
                   <Card key={index} sx={{ mb: 1, bgcolor: 'grey.50' }}>
                     <CardContent sx={{ py: 1, px: 2 }}>
-                      <Typography variant="subtitle2" color="primary">
-                        {interaction.interaction_type}
-                      </Typography>
-                      <Typography variant="body2" sx={{ mb: 0.5 }}>
-                        {interaction.notes}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {formatDate(interaction.interaction_date)} • {interaction.worker_name}
-                      </Typography>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="subtitle2" color="primary">
+                            {interaction.interaction_type}
+                          </Typography>
+                          <Typography variant="body2" sx={{ mb: 0.5 }}>
+                            {interaction.notes}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {formatDate(interaction.interaction_date)} • {interaction.worker_name}
+                          </Typography>
+                        </Box>
+                        <IconButton
+                          size="small"
+                          onClick={() => copyInteractionNotes(interaction)}
+                          title="Copy interaction notes"
+                          sx={{ ml: 1 }}
+                        >
+                          <CopyIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
                     </CardContent>
                   </Card>
                 ))}
