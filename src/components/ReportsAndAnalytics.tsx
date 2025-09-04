@@ -947,16 +947,35 @@ const ReportsAndAnalytics: React.FC = () => {
 
   const loadTotalStats = async (encounters: any[]) => {
     try {
-      // CRITICAL FIX: Include ALL encounters for accurate totals
+      // FILTER BY TIME RANGE for accurate totals that match the selected period
       console.log(`📈 Total Stats: Processing ${encounters.length} total encounters`);
+      const { startDate, endDate } = getDateRange();
     
     const filteredEncounters = encounters.filter(encounter => {
-      // Always include imported client data
-      if (encounter.source === 'imported_client_data') return true;
+      // Always include imported client data but check if it's within range
+      if (encounter.source === 'imported_client_data') {
+        const encounterDate = encounter.interaction_date || encounter.date || encounter.created_at || encounter.encounter_date || encounter.timestamp;
+        if (encounterDate) {
+          try {
+            const date = new Date(encounterDate);
+            return date >= new Date(startDate) && date <= new Date(endDate);
+          } catch (e) {
+            return true; // Include if date parsing fails
+          }
+        }
+        return true;
+      }
       
-      // For other data, apply minimal filtering
+      // For other data, apply date filtering
       const encounterDate = encounter.interaction_date || encounter.date || encounter.created_at || encounter.encounter_date || encounter.timestamp;
-      return !!encounterDate; // Just check that a date exists
+      if (!encounterDate) return false;
+      
+      try {
+        const date = new Date(encounterDate);
+        return date >= new Date(startDate) && date <= new Date(endDate);
+      } catch (e) {
+        return false;
+      }
     });
 
     // Count unique individuals - create new Set to avoid readonly issues
