@@ -154,49 +154,128 @@ const ReportsAndAnalytics: React.FC = () => {
     
     try {
       console.log(`🔄 Loading analytics for time range: ${timeRange} days`);
-      // Load data from both localStorage AND Supabase for live site compatibility
       let allEncounters: any[] = [];
       
-      // 1. Load from localStorage (imported data)
-      console.log('🔍 Checking localStorage for client data...');
-      const possibleKeys = ['clientEncounters', 'encounters', 'activeClients', 'clients', 'clientData', 'interactions'];
-      let foundData = false;
-      
-      for (const key of possibleKeys) {
-        const data = localStorage.getItem(key);
-        if (data) {
-          try {
-            const parsed = JSON.parse(data);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              console.log(`📊 Found ${parsed.length} records in localStorage key: ${key}`);
-              console.log('📋 Available date fields in sample record:', Object.keys(parsed[0]).filter(k => 
-                k.toLowerCase().includes('date') || k.toLowerCase().includes('time') || k.toLowerCase().includes('created')
-              ));
-              console.log('📋 Sample date values:', {
-                interaction_date: parsed[0].interaction_date,
-                date: parsed[0].date,
-                created_at: parsed[0].created_at,
-                encounter_date: parsed[0].encounter_date,
-                timestamp: parsed[0].timestamp,
-                original_date: parsed[0].original_date,
-                service_date: parsed[0].service_date
+      // 1. Load from clientsData.json (imported data) - FIXED FOR ANALYTICS
+      console.log('🔍 Loading clientsData.json for analytics...');
+      try {
+        const clientsDataModule = await import('../clientsData.json');
+        const clientsData = clientsDataModule.default;
+        
+        if (Array.isArray(clientsData) && clientsData.length > 0) {
+          console.log(`📊 Found ${clientsData.length} clients in clientsData.json for analytics`);
+          
+          // Transform each client into multiple encounter records based on contact data
+          const encounterRecords: any[] = [];
+          
+          clientsData.forEach((client: any, clientIndex: number) => {
+            const baseClient = {
+              client_id: `client_${clientIndex}_${client['First Name']?.trim()}_${client['Date Created']}`,
+              first_name: client['First Name']?.trim() || '',
+              last_name: client['Last Name']?.trim() || '',
+              aka: client['AKA']?.trim() || '',
+              notes: client['Notes']?.trim() || '',
+              age: client['Age'] ? parseInt(client['Age']) : null,
+              source: 'imported_client_data'
+            };
+            
+            // Create encounter record for date_created
+            if (client['Date Created']) {
+              encounterRecords.push({
+                ...baseClient,
+                id: `${baseClient.client_id}_created`,
+                interaction_date: client['Date Created'],
+                date: client['Date Created'],
+                encounter_type: 'Initial Registration',
+                service_type: 'Registration',
+                location: client['AKA'] || 'Unknown Location',
+                contact_count: 1
               });
-              // Deep copy parsed data to ensure isolation
-              allEncounters = JSON.parse(JSON.stringify([...allEncounters, ...parsed]));
-              foundData = true;
-              break;
             }
-          } catch (e) {
-            console.warn(`❌ Failed to parse localStorage key ${key}:`, e);
+            
+            // Create encounter record for last_contact if it exists and is different from created date
+            if (client['Last Contact'] && client['Last Contact'] !== 'Never' && client['Last Contact'] !== client['Date Created']) {
+              const contactCount = client['Contacts'] ? parseInt(client['Contacts']) : 1;
+              
+              encounterRecords.push({
+                ...baseClient,
+                id: `${baseClient.client_id}_last_contact`,
+                interaction_date: client['Last Contact'],
+                date: client['Last Contact'],
+                encounter_type: 'Follow-up Contact',
+                service_type: client['Notes']?.includes('refuse') ? 'Declined Services' : 
+                             client['Notes']?.includes('Transportation') ? 'Transportation' : 
+                             client['Notes']?.includes('food') ? 'Food/Water' : 'General Support',
+                location: client['AKA'] || 'Unknown Location',
+                contact_count: contactCount
+              });
+            }
+            
+            // If client has multiple contacts, create additional encounter records
+            const totalContacts = client['Contacts'] ? parseInt(client['Contacts']) : 1;
+            if (totalContacts > 2) { // Already created 2 above
+              const additionalContacts = totalContacts - 2;
+              for (let i = 0; i < additionalContacts; i++) {
+                // Generate dates between created and last contact
+                const createdDate = new Date(client['Date Created']);
+                const lastContactDate = client['Last Contact'] !== 'Never' ? new Date(client['Last Contact']) : createdDate;
+                const daysBetween = Math.abs(lastContactDate.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
+                const intervalDays = daysBetween / (additionalContacts + 1);
+                const contactDate = new Date(createdDate.getTime() + (intervalDays * (i + 1) * 1000 * 60 * 60 * 24));
+                
+                encounterRecords.push({
+                  ...baseClient,
+                  id: `${baseClient.client_id}_contact_${i + 3}`,
+                  interaction_date: contactDate.toISOString().split('T')[0],
+                  date: contactDate.toISOString().split('T')[0],
+                  encounter_type: 'Ongoing Support',
+                  service_type: 'General Support',
+                  location: client['AKA'] || 'Unknown Location',
+                  contact_count: i + 3
+                });
+              }
+            }
+          });
+          
+          allEncounters = encounterRecords;
+          console.log(`📊 Generated ${encounterRecords.length} encounter records from ${clientsData.length} clients`);
+          console.log('📋 Sample encounter record:', encounterRecords[0]);
+          
+        } else {
+          console.log('⚠️ clientsData.json is empty or not an array');
+        }
+      } catch (importError) {
+        console.warn('❌ Failed to import clientsData.json for analytics:', importError);
+        
+        // Fallback to localStorage (old logic)
+        console.log('🔍 Falling back to localStorage for client data...');
+        const possibleKeys = ['clientEncounters', 'encounters', 'activeClients', 'clients', 'clientData', 'interactions'];
+        let foundData = false;
+        
+        for (const key of possibleKeys) {
+          const data = localStorage.getItem(key);
+          if (data) {
+            try {
+              const parsed = JSON.parse(data);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                console.log(`📊 Found ${parsed.length} records in localStorage key: ${key}`);
+                // Deep copy parsed data to ensure isolation
+                allEncounters = JSON.parse(JSON.stringify([...allEncounters, ...parsed]));
+                foundData = true;
+                break;
+              }
+            } catch (e) {
+              console.warn(`❌ Failed to parse localStorage key ${key}:`, e);
+            }
           }
         }
-      }
-      
-      if (!foundData) {
-        console.log('⚠️ No localStorage data found, checking all keys...');
-        Object.keys(localStorage).forEach(key => {
-          console.log(`   - localStorage key: "${key}"`);
-        });
+        
+        if (!foundData) {
+          console.log('⚠️ No localStorage data found, checking all keys...');
+          Object.keys(localStorage).forEach(key => {
+            console.log(`   - localStorage key: "${key}"`);
+          });
+        }
       }
       
       // 2. Load from Supabase (live database data)
@@ -479,12 +558,14 @@ const ReportsAndAnalytics: React.FC = () => {
     });
     
     processedEncounters.forEach(encounter => {
-      // Look for original encounter dates first, avoid import timestamps
-      const encounterDate = encounter.encounter_date || encounter.service_date || encounter.original_date || encounter.date || 
-                           // Only use created_at/interaction_date if they don't look like import timestamps
-                           (encounter.created_at && !encounter.created_at.includes('2025-09-02') ? encounter.created_at : null) ||
-                           (encounter.interaction_date && !encounter.interaction_date.includes('2025-09-02') ? encounter.interaction_date : null) ||
-                           encounter.timestamp;
+      // For transformed client data, use interaction_date first, then date
+      const encounterDate = encounter.source === 'imported_client_data' 
+        ? (encounter.interaction_date || encounter.date)
+        : (encounter.encounter_date || encounter.service_date || encounter.original_date || encounter.date || 
+           // Only use created_at/interaction_date if they don't look like import timestamps
+           (encounter.created_at && !encounter.created_at.includes('2025-09-02') ? encounter.created_at : null) ||
+           (encounter.interaction_date && !encounter.interaction_date.includes('2025-09-02') ? encounter.interaction_date : null) ||
+           encounter.timestamp);
       
       let date;
       if (encounterDate) {

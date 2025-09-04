@@ -68,41 +68,81 @@ const DataExporter: React.FC = () => {
       
       console.log(`📦 Loading ${options.dataType} data for export preview...`);
       
-      // 1. Load from localStorage (imported data)
-      if (options.dataType === 'interactions') {
-        const possibleKeys = ['clientEncounters', 'encounters', 'activeClients', 'clients', 'clientData', 'interactions'];
+      // 1. Load from clientsData.json (imported data) - FIXED STRUCTURE
+      try {
+        const clientsDataModule = await import('../clientsData.json');
+        const clientsData = clientsDataModule.default;
         
-        for (const key of possibleKeys) {
-          const localData = localStorage.getItem(key);
-          if (localData) {
-            try {
-              const parsed = JSON.parse(localData);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                console.log(`📦 Found ${parsed.length} interactions in localStorage key: ${key}`);
-                allData = [...allData, ...parsed];
-                break;
+        if (Array.isArray(clientsData) && clientsData.length > 0) {
+          console.log(`📦 Found ${clientsData.length} clients in clientsData.json`);
+          
+          // Transform clientsData.json structure to match database format
+          const transformedData = clientsData.map((client: any, index: number) => ({
+            // Generate a consistent ID based on client data
+            id: client.id || `client_${index}_${client['First Name']?.trim()}_${client['Date Created']}`,
+            first_name: client['First Name']?.trim() || '',
+            middle: client['Middle']?.trim() || '',
+            last_name: client['Last Name']?.trim() || '',
+            aka: client['AKA']?.trim() || '',
+            gender: client['Gender'] || 'N/A',
+            ethnicity: client['Ethnicity']?.trim() || '',
+            age: client['Age'] ? parseInt(client['Age']) : null,
+            height: client['Height']?.trim() || '',
+            weight: client['Weight']?.trim() || '0 lbs',
+            hair: client['Hair']?.trim() || '',
+            eyes: client['Eyes']?.trim() || '',
+            description: client['Description']?.trim() || '',
+            notes: client['Notes']?.trim() || '',
+            last_contact: client['Last Contact'] === 'Never' ? null : client['Last Contact'],
+            contacts: client['Contacts'] ? parseInt(client['Contacts']) : 0,
+            date_created: client['Date Created'],
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            source: 'imported_client_data'
+          }));
+          
+          allData = transformedData;
+          console.log(`📦 Transformed ${transformedData.length} clients from JSON format`);
+        }
+      } catch (importError) {
+        console.warn('❌ Failed to import clientsData.json:', importError);
+        
+        // Fallback to localStorage
+        if (options.dataType === 'interactions') {
+          const possibleKeys = ['clientEncounters', 'encounters', 'activeClients', 'clients', 'clientData', 'interactions'];
+          
+          for (const key of possibleKeys) {
+            const localData = localStorage.getItem(key);
+            if (localData) {
+              try {
+                const parsed = JSON.parse(localData);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  console.log(`📦 Found ${parsed.length} interactions in localStorage key: ${key}`);
+                  allData = [...allData, ...parsed];
+                  break;
+                }
+              } catch (e) {
+                console.warn(`❌ Failed to parse localStorage key ${key}:`, e);
               }
-            } catch (e) {
-              console.warn(`❌ Failed to parse localStorage key ${key}:`, e);
             }
           }
-        }
-      } else {
-        // For clients, check client-specific keys
-        const possibleClientKeys = ['clients', 'clientEncounters', 'activeClients', 'clientData'];
-        
-        for (const key of possibleClientKeys) {
-          const localData = localStorage.getItem(key);
-          if (localData) {
-            try {
-              const parsed = JSON.parse(localData);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                console.log(`📦 Found ${parsed.length} clients in localStorage key: ${key}`);
-                allData = [...allData, ...parsed];
-                break;
+        } else {
+          // For clients, check client-specific keys
+          const possibleClientKeys = ['clients', 'clientEncounters', 'activeClients', 'clientData'];
+          
+          for (const key of possibleClientKeys) {
+            const localData = localStorage.getItem(key);
+            if (localData) {
+              try {
+                const parsed = JSON.parse(localData);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  console.log(`📦 Found ${parsed.length} clients in localStorage key: ${key}`);
+                  allData = [...allData, ...parsed];
+                  break;
+                }
+              } catch (e) {
+                console.warn(`❌ Failed to parse localStorage key ${key}:`, e);
               }
-            } catch (e) {
-              console.warn(`❌ Failed to parse localStorage key ${key}:`, e);
             }
           }
         }
@@ -122,18 +162,25 @@ const DataExporter: React.FC = () => {
         console.warn('Supabase data loading failed:', supabaseError);
       }
 
-      // Apply date filtering
+      // Apply date filtering - FIXED FOR 2024/2025 DATA
       let filteredData = allData;
       if (options.startDate || options.endDate) {
         filteredData = allData.filter(record => {
+          // Use the correct date fields for transformed data
           const dateField = options.dataType === 'interactions' 
             ? (record.interaction_date || record.date || record.created_at || record.encounter_date || record.timestamp)
-            : (record.created_at || record.date || record.timestamp);
+            : (record.date_created || record.last_contact || record.created_at || record.date || record.timestamp);
             
           if (!dateField) return true; // Include records without dates
           
           try {
             const recordDate = new Date(dateField);
+            
+            // Validate the date
+            if (isNaN(recordDate.getTime())) {
+              console.warn('Invalid date format:', dateField);
+              return true; // Include records with invalid dates
+            }
             
             if (options.startDate && recordDate < new Date(options.startDate)) {
               return false;
@@ -147,10 +194,18 @@ const DataExporter: React.FC = () => {
             }
             return true;
           } catch (e) {
-            console.warn('Invalid date format:', dateField);
+            console.warn('Date parsing error:', dateField, e);
             return true; // Include records with invalid dates
           }
         });
+      }
+      
+      console.log(`📦 Date filtering: ${allData.length} -> ${filteredData.length} records`);
+      if (filteredData.length > 0) {
+        const sampleDates = filteredData.slice(0, 3).map(r => 
+          r.date_created || r.last_contact || r.created_at || 'no date'
+        );
+        console.log(`📅 Sample dates in filtered data:`, sampleDates);
       }
 
       console.log(`📦 Total filtered ${options.dataType}: ${filteredData.length}`);
@@ -181,41 +236,81 @@ const DataExporter: React.FC = () => {
       
       console.log(`📦 Loading full ${options.dataType} data for export...`);
       
-      // 1. Load from localStorage (imported data)
-      if (options.dataType === 'interactions') {
-        const possibleKeys = ['clientEncounters', 'encounters', 'activeClients', 'clients', 'clientData', 'interactions'];
+      // 1. Load from clientsData.json (imported data) - SAME FIX AS PREVIEW
+      try {
+        const clientsDataModule = await import('../clientsData.json');
+        const clientsData = clientsDataModule.default;
         
-        for (const key of possibleKeys) {
-          const localData = localStorage.getItem(key);
-          if (localData) {
-            try {
-              const parsed = JSON.parse(localData);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                console.log(`📦 Loading ${parsed.length} interactions from localStorage key: ${key}`);
-                allData = [...allData, ...parsed];
-                break;
+        if (Array.isArray(clientsData) && clientsData.length > 0) {
+          console.log(`📦 Found ${clientsData.length} clients in clientsData.json for export`);
+          
+          // Transform clientsData.json structure to match database format
+          const transformedData = clientsData.map((client: any, index: number) => ({
+            // Generate a consistent ID based on client data
+            id: client.id || `client_${index}_${client['First Name']?.trim()}_${client['Date Created']}`,
+            first_name: client['First Name']?.trim() || '',
+            middle: client['Middle']?.trim() || '',
+            last_name: client['Last Name']?.trim() || '',
+            aka: client['AKA']?.trim() || '',
+            gender: client['Gender'] || 'N/A',
+            ethnicity: client['Ethnicity']?.trim() || '',
+            age: client['Age'] ? parseInt(client['Age']) : null,
+            height: client['Height']?.trim() || '',
+            weight: client['Weight']?.trim() || '0 lbs',
+            hair: client['Hair']?.trim() || '',
+            eyes: client['Eyes']?.trim() || '',
+            description: client['Description']?.trim() || '',
+            notes: client['Notes']?.trim() || '',
+            last_contact: client['Last Contact'] === 'Never' ? null : client['Last Contact'],
+            contacts: client['Contacts'] ? parseInt(client['Contacts']) : 0,
+            date_created: client['Date Created'],
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            source: 'imported_client_data'
+          }));
+          
+          allData = transformedData;
+          console.log(`📦 Transformed ${transformedData.length} clients from JSON format for export`);
+        }
+      } catch (importError) {
+        console.warn('❌ Failed to import clientsData.json for export:', importError);
+        
+        // Fallback to localStorage (old logic)
+        if (options.dataType === 'interactions') {
+          const possibleKeys = ['clientEncounters', 'encounters', 'activeClients', 'clients', 'clientData', 'interactions'];
+          
+          for (const key of possibleKeys) {
+            const localData = localStorage.getItem(key);
+            if (localData) {
+              try {
+                const parsed = JSON.parse(localData);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  console.log(`📦 Loading ${parsed.length} interactions from localStorage key: ${key}`);
+                  allData = [...allData, ...parsed];
+                  break;
+                }
+              } catch (e) {
+                console.warn(`❌ Failed to parse localStorage key ${key}:`, e);
               }
-            } catch (e) {
-              console.warn(`❌ Failed to parse localStorage key ${key}:`, e);
             }
           }
-        }
-      } else {
-        // For clients, check client-specific keys
-        const possibleClientKeys = ['clients', 'clientEncounters', 'activeClients', 'clientData'];
-        
-        for (const key of possibleClientKeys) {
-          const localData = localStorage.getItem(key);
-          if (localData) {
-            try {
-              const parsed = JSON.parse(localData);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                console.log(`📦 Loading ${parsed.length} clients from localStorage key: ${key}`);
-                allData = [...allData, ...parsed];
-                break;
+        } else {
+          // For clients, check client-specific keys
+          const possibleClientKeys = ['clients', 'clientEncounters', 'activeClients', 'clientData'];
+          
+          for (const key of possibleClientKeys) {
+            const localData = localStorage.getItem(key);
+            if (localData) {
+              try {
+                const parsed = JSON.parse(localData);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  console.log(`📦 Loading ${parsed.length} clients from localStorage key: ${key}`);
+                  allData = [...allData, ...parsed];
+                  break;
+                }
+              } catch (e) {
+                console.warn(`❌ Failed to parse localStorage key ${key}:`, e);
               }
-            } catch (e) {
-              console.warn(`❌ Failed to parse localStorage key ${key}:`, e);
             }
           }
         }
@@ -235,18 +330,25 @@ const DataExporter: React.FC = () => {
         console.warn('Supabase export loading failed:', supabaseError);
       }
 
-      // Apply date filtering
+      // Apply date filtering - FIXED FOR EXPORT
       let exportData = allData;
       if (options.startDate || options.endDate) {
         exportData = allData.filter(record => {
+          // Use the correct date fields for transformed data
           const dateField = options.dataType === 'interactions' 
             ? (record.interaction_date || record.date || record.created_at || record.encounter_date || record.timestamp)
-            : (record.created_at || record.date || record.timestamp);
+            : (record.date_created || record.last_contact || record.created_at || record.date || record.timestamp);
             
           if (!dateField) return true; // Include records without dates
           
           try {
             const recordDate = new Date(dateField);
+            
+            // Validate the date
+            if (isNaN(recordDate.getTime())) {
+              console.warn('Invalid date format during export:', dateField);
+              return true; // Include records with invalid dates
+            }
             
             if (options.startDate && recordDate < new Date(options.startDate)) {
               return false;
@@ -260,10 +362,18 @@ const DataExporter: React.FC = () => {
             }
             return true;
           } catch (e) {
-            console.warn('Invalid date format during export:', dateField);
+            console.warn('Date parsing error during export:', dateField, e);
             return true; // Include records with invalid dates
           }
         });
+        
+        console.log(`📦 Export date filtering: ${allData.length} -> ${exportData.length} records`);
+        if (exportData.length > 0) {
+          const sampleDates = exportData.slice(0, 3).map(r => 
+            r.date_created || r.last_contact || r.created_at || 'no date'
+          );
+          console.log(`📅 Sample dates in export data:`, sampleDates);
+        }
       }
 
       console.log(`📦 Exporting ${exportData.length} ${options.dataType} records`);
