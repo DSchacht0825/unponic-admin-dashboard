@@ -951,6 +951,8 @@ const ReportsAndAnalytics: React.FC = () => {
       console.log(`📈 Total Stats: Processing ${encounters.length} total encounters`);
       const { startDate, endDate } = getDateRange();
     
+    console.log(`📅 Total Stats filtering: ${startDate} to ${endDate} (${timeRange} days)`);
+    
     const filteredEncounters = encounters.filter(encounter => {
       // Always include imported client data but check if it's within range
       if (encounter.source === 'imported_client_data') {
@@ -958,12 +960,15 @@ const ReportsAndAnalytics: React.FC = () => {
         if (encounterDate) {
           try {
             const date = new Date(encounterDate);
-            return date >= new Date(startDate) && date <= new Date(endDate);
+            const isInRange = date >= new Date(startDate) && date <= new Date(endDate);
+            console.log(`📊 Encounter ${encounter.id}: ${encounterDate} -> ${isInRange ? 'INCLUDED' : 'EXCLUDED'}`);
+            return isInRange;
           } catch (e) {
-            return true; // Include if date parsing fails
+            console.warn('Date parsing failed for total stats:', encounterDate);
+            return false; // Changed to false for debugging
           }
         }
-        return true;
+        return false;
       }
       
       // For other data, apply date filtering
@@ -977,6 +982,13 @@ const ReportsAndAnalytics: React.FC = () => {
         return false;
       }
     });
+    
+    console.log(`📈 Total encounters after filtering: ${filteredEncounters.length} (was ${encounters.length})`);
+    console.log('📊 Sample filtered encounters:', filteredEncounters.slice(0, 3).map(e => ({
+      id: e.id, 
+      date: e.interaction_date || e.date, 
+      source: e.source
+    })));
 
     // Count unique individuals - create new Set to avoid readonly issues
     const uniqueIndividuals = new Set<string>();
