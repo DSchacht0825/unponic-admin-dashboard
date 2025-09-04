@@ -82,7 +82,13 @@ interface MonthlyComparison {
 }
 
 const ReportsAndAnalytics: React.FC = () => {
-  const [timeRange, setTimeRange] = useState('90'); // Match the display
+  // Initialize from URL hash or default to 90
+  const getInitialTimeRange = () => {
+    const hash = window.location.hash;
+    const match = hash.match(/timeRange=(\d+)/);
+    return match ? match[1] : '90';
+  };
+  const [timeRange, setTimeRange] = useState(getInitialTimeRange());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -1008,7 +1014,9 @@ const ReportsAndAnalytics: React.FC = () => {
   };
 
   const handleTimeRangeChange = (event: SelectChangeEvent) => {
-    setTimeRange(event.target.value);
+    // Emergency fix: Force page reload to bypass readonly errors
+    window.location.hash = `timeRange=${event.target.value}`;
+    window.location.reload();
   };
 
   if (loading) {
