@@ -128,6 +128,26 @@ const ReportsAndAnalytics: React.FC = () => {
     return result;
   };
 
+  // Function to create chart-safe data that Recharts can't break
+  const makeChartSafe = (data: any[]): any[] => {
+    return data.map(item => {
+      const safeItem: any = {};
+      Object.keys(item).forEach(key => {
+        const value = item[key];
+        if (typeof value === 'string' || typeof value === 'number') {
+          safeItem[key] = value;
+        } else if (Array.isArray(value)) {
+          safeItem[key] = [...value]; // Create new array
+        } else if (value && typeof value === 'object') {
+          safeItem[key] = { ...value }; // Create new object
+        } else {
+          safeItem[key] = value;
+        }
+      });
+      return safeItem;
+    });
+  };
+
   const loadAnalyticsData = async () => {
     setLoading(true);
     setError(null);
@@ -1149,8 +1169,8 @@ const ReportsAndAnalytics: React.FC = () => {
         </Box>
       </Box>
 
-      {/* Charts - TEMPORARILY DISABLED FOR DEBUGGING */}
-      <Box sx={{ display: 'none', flexWrap: 'wrap', gap: 3 }}>
+      {/* Charts */}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
         {/* Encounter Trends */}
         <Paper sx={{ flex: '1 1 600px', p: 3, minWidth: '600px' }}>
           <Typography variant="h6" gutterBottom>
@@ -1158,7 +1178,7 @@ const ReportsAndAnalytics: React.FC = () => {
           </Typography>
           {encounterTrends.length > 0 ? (
             <ResponsiveContainer key={`trends-${timeRange}`} width="100%" height={300}>
-              <LineChart data={encounterTrends}>
+              <LineChart data={makeChartSafe(encounterTrends)}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" />
                 <YAxis />
@@ -1188,7 +1208,7 @@ const ReportsAndAnalytics: React.FC = () => {
                 <ResponsiveContainer key={`services-${timeRange}`} width="100%" height={300}>
                   <PieChart>
                     <Pie
-                      data={serviceDistribution}
+                      data={makeChartSafe(serviceDistribution)}
                       cx="50%"
                       cy="50%"
                       labelLine={false}
@@ -1296,7 +1316,7 @@ const ReportsAndAnalytics: React.FC = () => {
           </Typography>
           {userProductivity.length > 0 ? (
             <ResponsiveContainer key={`productivity-${timeRange}`} width="100%" height={300}>
-              <BarChart data={userProductivity}>
+              <BarChart data={makeChartSafe(userProductivity)}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis />
@@ -1320,7 +1340,7 @@ const ReportsAndAnalytics: React.FC = () => {
           </Typography>
           {monthlyComparison.length > 0 ? (
             <ResponsiveContainer key={`monthly-${timeRange}`} width="100%" height={300}>
-              <AreaChart data={monthlyComparison}>
+              <AreaChart data={makeChartSafe(monthlyComparison)}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
