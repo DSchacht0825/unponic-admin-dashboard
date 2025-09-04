@@ -236,43 +236,37 @@ const ReportsAndAnalytics: React.FC = () => {
           // SIMPLIFIED CLIENT TO ENCOUNTER CONVERSION
           const clientAsEncounters: any[] = [];
           
+          // Get current time range safely
+          const currentTimeRange = parseInt(timeRange) || 90;
+          console.log(`📅 Generating encounters for time range: ${currentTimeRange} days`);
+          
+          // Calculate total encounters to generate
+          const totalEncounters = clientsWithContacts.reduce((sum, client) => sum + (client.contacts || 1), 0);
+          console.log(`📊 Total encounters to distribute: ${totalEncounters}`);
+          
           // Use map instead of forEach to create completely new data
-          const generatedEncounters = clientsWithContacts.flatMap(client => {
+          const generatedEncounters: any[] = [];
+          let encounterIndex = 0;
+          
+          clientsWithContacts.forEach(client => {
             // Create encounters based on contact count
             const contactCount = client.contacts || 1;
             
-            // Get current time range safely
-            const currentTimeRange = parseInt(timeRange) || 90;
-            console.log(`📅 Generating encounters for time range: ${currentTimeRange} days`);
-            
-            const encounters = [];
-            
             for (let i = 0; i < contactCount; i++) {
-              // Generate dates within the selected time range dynamically
+              // Distribute encounters across the entire time range and all clients
               const today = new Date();
               
-              // Calculate max days back based on current time range
-              let maxDaysBack = 1; // Default minimum
+              // Calculate days back to spread encounters evenly across time range
+              const daysBack = Math.floor((encounterIndex / totalEncounters) * (currentTimeRange - 1));
               
-              if (currentTimeRange === 7) {
-                maxDaysBack = 6; // Spread over 6 days for 7-day range
-              } else if (currentTimeRange === 30) {
-                maxDaysBack = 29; // Spread over 29 days for 30-day range
-              } else if (currentTimeRange === 90) {
-                maxDaysBack = 89; // Spread over 89 days for 90-day range
-              } else if (currentTimeRange === 365) {
-                maxDaysBack = 364; // Spread over 364 days for 1-year range
-              } else {
-                // Handle any other values
-                maxDaysBack = Math.max(1, currentTimeRange - 1);
-              }
+              // Add some randomization to avoid clustering
+              const randomOffset = Math.floor(Math.random() * Math.min(3, currentTimeRange / 10));
+              const finalDaysBack = Math.min(daysBack + randomOffset, currentTimeRange - 1);
               
-              // Distribute encounters evenly across the time period
-              const daysBack = Math.floor((i / Math.max(contactCount, 1)) * maxDaysBack);
-              const encounterDate = new Date(today.getTime() - (daysBack * 24 * 60 * 60 * 1000));
+              const encounterDate = new Date(today.getTime() - (finalDaysBack * 24 * 60 * 60 * 1000));
               const dateString = encounterDate.toISOString().split('T')[0];
               
-              console.log(`✅ Generated encounter ${i + 1}/${contactCount} for ${client.first_name}: ${dateString} (${daysBack}/${maxDaysBack} days back, range=${currentTimeRange})`);  
+              console.log(`✅ Generated encounter ${encounterIndex + 1}/${totalEncounters} for ${client.first_name}: ${dateString} (${finalDaysBack} days back, range=${currentTimeRange})`);  
               
               // Create fresh service array for each encounter
               const serviceList = [];
@@ -287,7 +281,7 @@ const ReportsAndAnalytics: React.FC = () => {
               if (serviceList.length === 0) serviceList.push('General Contact');
               
               // Create a completely isolated encounter object
-              encounters.push({
+              generatedEncounters.push({
                 id: `client-${client.id}-contact-${i + 1}`,
                 client_id: String(client.id),
                 client_name: `${client.first_name || ''} ${client.last_name || ''}`.trim(),
@@ -308,9 +302,9 @@ const ReportsAndAnalytics: React.FC = () => {
                 encounter_number: Number(i + 1),
                 source: 'imported_client_data'
               });
+              
+              encounterIndex++;
             }
-            
-            return encounters;
           });
           
           // Add all generated encounters
