@@ -253,20 +253,10 @@ const ReportsAndAnalytics: React.FC = () => {
             const contactCount = client.contacts || 1;
             
             for (let i = 0; i < contactCount; i++) {
-              // Distribute encounters across the entire time range and all clients
-              const today = new Date();
-              
-              // Calculate days back to spread encounters evenly across time range
-              const daysBack = Math.floor((encounterIndex / totalEncounters) * (currentTimeRange - 1));
-              
-              // Add some randomization to avoid clustering
-              const randomOffset = Math.floor(Math.random() * Math.min(3, currentTimeRange / 10));
-              const finalDaysBack = Math.min(daysBack + randomOffset, currentTimeRange - 1);
-              
               // Generate dates with proper distribution across the full time range
               const today = new Date();
               
-              // Calculate a more realistic distribution 
+              // Calculate a realistic distribution based on encounter index
               let daySpread;
               
               if (currentTimeRange <= 7) {
@@ -292,7 +282,7 @@ const ReportsAndAnalytics: React.FC = () => {
               const encounterDate = new Date(today.getTime() - (daySpread * 24 * 60 * 60 * 1000));
               const dateString = encounterDate.toISOString().split('T')[0];
               
-              console.log(`✅ Generated encounter ${encounterIndex + 1}/${totalEncounters} for ${client.first_name}: ${dateString} (${finalDaysBack} days back, range=${currentTimeRange})`);  
+              console.log(`✅ Generated encounter ${encounterIndex + 1}/${totalEncounters} for ${client.first_name}: ${dateString} (${daySpread} days back, range=${currentTimeRange})`);  
               
               // Create fresh service array for each encounter
               const serviceList = [];
