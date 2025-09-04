@@ -263,25 +263,33 @@ const ReportsAndAnalytics: React.FC = () => {
               const randomOffset = Math.floor(Math.random() * Math.min(3, currentTimeRange / 10));
               const finalDaysBack = Math.min(daysBack + randomOffset, currentTimeRange - 1);
               
-              // IMPORTANT: For realistic data, use more spread out dates
-              // Instead of just subtracting days, ensure we get a good spread
-              let encounterDate;
+              // Generate dates with proper distribution across the full time range
+              const today = new Date();
+              
+              // Calculate a more realistic distribution 
+              let daySpread;
+              
               if (currentTimeRange <= 7) {
-                // For 7 days, use recent dates
-                encounterDate = new Date(today.getTime() - (finalDaysBack * 24 * 60 * 60 * 1000));
+                // 7 days: spread evenly across 0-6 days back
+                daySpread = Math.floor((encounterIndex / totalEncounters) * 7);
               } else if (currentTimeRange <= 30) {
-                // For 30 days, spread more evenly
-                const daySpread = Math.floor((encounterIndex / totalEncounters) * 30) + Math.floor(Math.random() * 5);
-                encounterDate = new Date(today.getTime() - (daySpread * 24 * 60 * 60 * 1000));
+                // 30 days: spread across 0-29 days back with some clustering in recent days
+                const baseDays = Math.floor((encounterIndex / totalEncounters) * 30);
+                const recentBias = Math.random() < 0.3 ? Math.floor(Math.random() * 7) : 0; // 30% chance of recent date
+                daySpread = Math.min(baseDays + recentBias, 29);
               } else if (currentTimeRange <= 90) {
-                // For 90 days, use wider spread
-                const daySpread = Math.floor((encounterIndex / totalEncounters) * 90) + Math.floor(Math.random() * 10);
-                encounterDate = new Date(today.getTime() - (daySpread * 24 * 60 * 60 * 1000));
+                // 90 days: good spread across 0-89 days back
+                const baseDays = Math.floor((encounterIndex / totalEncounters) * 90);
+                const randomVariation = Math.floor(Math.random() * 14) - 7; // ±7 days variation
+                daySpread = Math.max(0, Math.min(baseDays + randomVariation, 89));
               } else {
-                // For 365 days, use very wide spread
-                const daySpread = Math.floor((encounterIndex / totalEncounters) * 365) + Math.floor(Math.random() * 30);
-                encounterDate = new Date(today.getTime() - (daySpread * 24 * 60 * 60 * 1000));
+                // 365 days: spread across full year
+                const baseDays = Math.floor((encounterIndex / totalEncounters) * 365);
+                const randomVariation = Math.floor(Math.random() * 60) - 30; // ±30 days variation
+                daySpread = Math.max(0, Math.min(baseDays + randomVariation, 364));
               }
+              
+              const encounterDate = new Date(today.getTime() - (daySpread * 24 * 60 * 60 * 1000));
               const dateString = encounterDate.toISOString().split('T')[0];
               
               console.log(`✅ Generated encounter ${encounterIndex + 1}/${totalEncounters} for ${client.first_name}: ${dateString} (${finalDaysBack} days back, range=${currentTimeRange})`);  
@@ -969,9 +977,6 @@ const ReportsAndAnalytics: React.FC = () => {
       console.log(`📈 Total Stats: Processing ${encounters.length} total encounters`);
       const { startDate, endDate } = getDateRange();
     
-    console.log(`📅 Total Stats filtering: ${startDate} to ${endDate} (${timeRange} days)`);
-    
-    let debugCount = 0;
     const filteredEncounters = encounters.filter(encounter => {
       // Always include imported client data but check if it's within range
       if (encounter.source === 'imported_client_data') {
@@ -980,15 +985,9 @@ const ReportsAndAnalytics: React.FC = () => {
           try {
             const date = new Date(encounterDate);
             const isInRange = date >= new Date(startDate) && date <= new Date(endDate);
-            // Only log first few for debugging
-            if (debugCount < 5) {
-              console.log(`📊 Encounter ${encounter.id}: ${encounterDate} (parsed: ${date.toISOString().split('T')[0]}) -> ${isInRange ? 'INCLUDED' : 'EXCLUDED'}`);
-              debugCount++;
-            }
             return isInRange;
           } catch (e) {
-            console.warn('Date parsing failed for total stats:', encounterDate);
-            return false; // Changed to false for debugging
+            return false;
           }
         }
         return false;
@@ -1005,13 +1004,6 @@ const ReportsAndAnalytics: React.FC = () => {
         return false;
       }
     });
-    
-    console.log(`📈 Total encounters after filtering: ${filteredEncounters.length} (was ${encounters.length})`);
-    console.log('📊 Sample filtered encounters:', filteredEncounters.slice(0, 3).map(e => ({
-      id: e.id, 
-      date: e.interaction_date || e.date, 
-      source: e.source
-    })));
 
     // Count unique individuals - create new Set to avoid readonly issues
     const uniqueIndividuals = new Set<string>();
