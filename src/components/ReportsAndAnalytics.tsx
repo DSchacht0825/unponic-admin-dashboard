@@ -953,6 +953,7 @@ const ReportsAndAnalytics: React.FC = () => {
     
     console.log(`📅 Total Stats filtering: ${startDate} to ${endDate} (${timeRange} days)`);
     
+    let debugCount = 0;
     const filteredEncounters = encounters.filter(encounter => {
       // Always include imported client data but check if it's within range
       if (encounter.source === 'imported_client_data') {
@@ -961,7 +962,11 @@ const ReportsAndAnalytics: React.FC = () => {
           try {
             const date = new Date(encounterDate);
             const isInRange = date >= new Date(startDate) && date <= new Date(endDate);
-            console.log(`📊 Encounter ${encounter.id}: ${encounterDate} -> ${isInRange ? 'INCLUDED' : 'EXCLUDED'}`);
+            // Only log first few for debugging
+            if (debugCount < 5) {
+              console.log(`📊 Encounter ${encounter.id}: ${encounterDate} (parsed: ${date.toISOString().split('T')[0]}) -> ${isInRange ? 'INCLUDED' : 'EXCLUDED'}`);
+              debugCount++;
+            }
             return isInRange;
           } catch (e) {
             console.warn('Date parsing failed for total stats:', encounterDate);
