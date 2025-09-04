@@ -68,41 +68,101 @@ const DataExporter: React.FC = () => {
       
       console.log(`📦 Loading ${options.dataType} data for export preview...`);
       
-      // 1. Load from clientsData.json (imported data) - FIXED STRUCTURE
+      // 1. Load from clientsData.json (imported data) - ALWAYS LOAD REGARDLESS OF DATA TYPE
       try {
         const clientsDataModule = await import('../clientsData.json');
         const clientsData = clientsDataModule.default;
         
         if (Array.isArray(clientsData) && clientsData.length > 0) {
           console.log(`📦 Found ${clientsData.length} clients in clientsData.json`);
+          console.log(`📦 Sample client record:`, clientsData[0]);
+          console.log(`📦 Data type being processed: ${options.dataType}`);
           
-          // Transform clientsData.json structure to match database format
-          const transformedData = clientsData.map((client: any, index: number) => ({
-            // Generate a consistent ID based on client data
-            id: client.id || `client_${index}_${client['First Name']?.trim()}_${client['Date Created']}`,
-            first_name: client['First Name']?.trim() || '',
-            middle: client['Middle']?.trim() || '',
-            last_name: client['Last Name']?.trim() || '',
-            aka: client['AKA']?.trim() || '',
-            gender: client['Gender'] || 'N/A',
-            ethnicity: client['Ethnicity']?.trim() || '',
-            age: client['Age'] ? parseInt(client['Age']) : null,
-            height: client['Height']?.trim() || '',
-            weight: client['Weight']?.trim() || '0 lbs',
-            hair: client['Hair']?.trim() || '',
-            eyes: client['Eyes']?.trim() || '',
-            description: client['Description']?.trim() || '',
-            notes: client['Notes']?.trim() || '',
-            last_contact: client['Last Contact'] === 'Never' ? null : client['Last Contact'],
-            contacts: client['Contacts'] ? parseInt(client['Contacts']) : 0,
-            date_created: client['Date Created'],
-            created_at: client['Date Created'] ? new Date(client['Date Created']).toISOString() : null,
-            updated_at: client['Last Contact'] && client['Last Contact'] !== 'Never' ? new Date(client['Last Contact']).toISOString() : (client['Date Created'] ? new Date(client['Date Created']).toISOString() : null),
-            source: 'imported_client_data'
-          }));
+          if (options.dataType === 'interactions') {
+            // Transform client data into interaction records
+            const interactionRecords: any[] = [];
+            
+            clientsData.forEach((client: any, index: number) => {
+              // Create interaction record for date_created
+              if (client['Date Created']) {
+                interactionRecords.push({
+                  id: `client_${index}_created`,
+                  client_id: `client_${index}_${client['First Name']?.trim()}_${client['Date Created']}`,
+                  client_name: `${client['First Name']?.trim() || ''} ${client['Last Name']?.trim() || ''}`.trim(),
+                  interaction_date: client['Date Created'],
+                  date: client['Date Created'],
+                  encounter_date: client['Date Created'],
+                  service_date: client['Date Created'],
+                  encounter_type: 'Initial Registration',
+                  service_type: 'Registration',
+                  services_provided: ['Registration'],
+                  location: client['AKA'] || 'Unknown Location',
+                  notes: client['Notes']?.trim() || '',
+                  worker_name: 'System Import',
+                  contact_count: 1,
+                  created_at: client['Date Created'] ? new Date(client['Date Created']).toISOString() : null,
+                  source: 'imported_client_data'
+                });
+              }
+              
+              // Create interaction record for last_contact if different from created
+              if (client['Last Contact'] && client['Last Contact'] !== 'Never' && client['Last Contact'] !== client['Date Created']) {
+                interactionRecords.push({
+                  id: `client_${index}_last_contact`,
+                  client_id: `client_${index}_${client['First Name']?.trim()}_${client['Date Created']}`,
+                  client_name: `${client['First Name']?.trim() || ''} ${client['Last Name']?.trim() || ''}`.trim(),
+                  interaction_date: client['Last Contact'],
+                  date: client['Last Contact'],
+                  encounter_date: client['Last Contact'],
+                  service_date: client['Last Contact'],
+                  encounter_type: 'Follow-up Contact',
+                  service_type: client['Notes']?.includes('Transportation') ? 'Transportation' : 
+                               client['Notes']?.includes('food') ? 'Food/Water' : 'General Support',
+                  services_provided: [client['Notes']?.includes('Transportation') ? 'Transportation' : 'General Support'],
+                  location: client['AKA'] || 'Unknown Location',
+                  notes: client['Notes']?.trim() || '',
+                  worker_name: 'System Import',
+                  contact_count: client['Contacts'] ? parseInt(client['Contacts']) : 1,
+                  created_at: client['Last Contact'] ? new Date(client['Last Contact']).toISOString() : null,
+                  source: 'imported_client_data'
+                });
+              }
+            });
+            
+            allData = interactionRecords;
+            console.log(`📦 Generated ${interactionRecords.length} interaction records from ${clientsData.length} clients`);
+            
+          } else {
+            // Transform clientsData.json structure to match database format for clients
+            const transformedData = clientsData.map((client: any, index: number) => ({
+              // Generate a consistent ID based on client data
+              id: client.id || `client_${index}_${client['First Name']?.trim()}_${client['Date Created']}`,
+              first_name: client['First Name']?.trim() || '',
+              middle: client['Middle']?.trim() || '',
+              last_name: client['Last Name']?.trim() || '',
+              aka: client['AKA']?.trim() || '',
+              gender: client['Gender'] || 'N/A',
+              ethnicity: client['Ethnicity']?.trim() || '',
+              age: client['Age'] ? parseInt(client['Age']) : null,
+              height: client['Height']?.trim() || '',
+              weight: client['Weight']?.trim() || '0 lbs',
+              hair: client['Hair']?.trim() || '',
+              eyes: client['Eyes']?.trim() || '',
+              description: client['Description']?.trim() || '',
+              notes: client['Notes']?.trim() || '',
+              last_contact: client['Last Contact'] === 'Never' ? null : client['Last Contact'],
+              contacts: client['Contacts'] ? parseInt(client['Contacts']) : 0,
+              date_created: client['Date Created'],
+              created_at: client['Date Created'] ? new Date(client['Date Created']).toISOString() : null,
+              updated_at: client['Last Contact'] && client['Last Contact'] !== 'Never' ? new Date(client['Last Contact']).toISOString() : (client['Date Created'] ? new Date(client['Date Created']).toISOString() : null),
+              source: 'imported_client_data'
+            }));
+            
+            allData = transformedData;
+            console.log(`📦 Transformed ${transformedData.length} clients from JSON format`);
+          }
           
-          allData = transformedData;
-          console.log(`📦 Transformed ${transformedData.length} clients from JSON format`);
+          console.log(`📦 Sample transformed record:`, allData[0]);
         }
       } catch (importError) {
         console.warn('❌ Failed to import clientsData.json:', importError);
@@ -164,14 +224,33 @@ const DataExporter: React.FC = () => {
 
       // Apply date filtering - FIXED FOR 2024/2025 DATA
       let filteredData = allData;
+      console.log(`📦 Pre-filtering data count: ${allData.length}`);
+      console.log(`📦 Date filter - Start: ${options.startDate}, End: ${options.endDate}`);
+      
       if (options.startDate || options.endDate) {
-        filteredData = allData.filter(record => {
+        let filterDebugCount = 0;
+        filteredData = allData.filter((record, index) => {
           // Use the correct date fields for transformed data
           const dateField = options.dataType === 'interactions' 
             ? (record.interaction_date || record.date || record.created_at || record.encounter_date || record.timestamp)
             : (record.date_created || record.last_contact || record.created_at || record.date || record.timestamp);
             
-          if (!dateField) return true; // Include records without dates
+          // Only log first 3 records for debugging
+          if (filterDebugCount < 3) {
+            console.log(`📦 Record ${index}: date field = ${dateField} (dataType: ${options.dataType})`);
+            console.log(`📦 Available date fields:`, {
+              date_created: record.date_created,
+              last_contact: record.last_contact,
+              created_at: record.created_at,
+              date: record.date
+            });
+            filterDebugCount++;
+          }
+          
+          if (!dateField) {
+            if (filterDebugCount <= 3) console.log(`📦 No date field found for record ${index}`);
+            return true; // Include records without dates
+          }
           
           try {
             const recordDate = new Date(dateField);
@@ -244,33 +323,89 @@ const DataExporter: React.FC = () => {
         if (Array.isArray(clientsData) && clientsData.length > 0) {
           console.log(`📦 Found ${clientsData.length} clients in clientsData.json for export`);
           
-          // Transform clientsData.json structure to match database format
-          const transformedData = clientsData.map((client: any, index: number) => ({
-            // Generate a consistent ID based on client data
-            id: client.id || `client_${index}_${client['First Name']?.trim()}_${client['Date Created']}`,
-            first_name: client['First Name']?.trim() || '',
-            middle: client['Middle']?.trim() || '',
-            last_name: client['Last Name']?.trim() || '',
-            aka: client['AKA']?.trim() || '',
-            gender: client['Gender'] || 'N/A',
-            ethnicity: client['Ethnicity']?.trim() || '',
-            age: client['Age'] ? parseInt(client['Age']) : null,
-            height: client['Height']?.trim() || '',
-            weight: client['Weight']?.trim() || '0 lbs',
-            hair: client['Hair']?.trim() || '',
-            eyes: client['Eyes']?.trim() || '',
-            description: client['Description']?.trim() || '',
-            notes: client['Notes']?.trim() || '',
-            last_contact: client['Last Contact'] === 'Never' ? null : client['Last Contact'],
-            contacts: client['Contacts'] ? parseInt(client['Contacts']) : 0,
-            date_created: client['Date Created'],
-            created_at: client['Date Created'] ? new Date(client['Date Created']).toISOString() : null,
-            updated_at: client['Last Contact'] && client['Last Contact'] !== 'Never' ? new Date(client['Last Contact']).toISOString() : (client['Date Created'] ? new Date(client['Date Created']).toISOString() : null),
-            source: 'imported_client_data'
-          }));
-          
-          allData = transformedData;
-          console.log(`📦 Transformed ${transformedData.length} clients from JSON format for export`);
+          if (options.dataType === 'interactions') {
+            // Transform client data into interaction records for export
+            const interactionRecords: any[] = [];
+            
+            clientsData.forEach((client: any, index: number) => {
+              // Create interaction record for date_created
+              if (client['Date Created']) {
+                interactionRecords.push({
+                  id: `client_${index}_created`,
+                  client_id: `client_${index}_${client['First Name']?.trim()}_${client['Date Created']}`,
+                  client_name: `${client['First Name']?.trim() || ''} ${client['Last Name']?.trim() || ''}`.trim(),
+                  interaction_date: client['Date Created'],
+                  date: client['Date Created'],
+                  encounter_date: client['Date Created'],
+                  service_date: client['Date Created'],
+                  encounter_type: 'Initial Registration',
+                  service_type: 'Registration',
+                  services_provided: ['Registration'],
+                  location: client['AKA'] || 'Unknown Location',
+                  notes: client['Notes']?.trim() || '',
+                  worker_name: 'System Import',
+                  contact_count: 1,
+                  created_at: client['Date Created'] ? new Date(client['Date Created']).toISOString() : null,
+                  source: 'imported_client_data'
+                });
+              }
+              
+              // Create interaction record for last_contact if different from created
+              if (client['Last Contact'] && client['Last Contact'] !== 'Never' && client['Last Contact'] !== client['Date Created']) {
+                interactionRecords.push({
+                  id: `client_${index}_last_contact`,
+                  client_id: `client_${index}_${client['First Name']?.trim()}_${client['Date Created']}`,
+                  client_name: `${client['First Name']?.trim() || ''} ${client['Last Name']?.trim() || ''}`.trim(),
+                  interaction_date: client['Last Contact'],
+                  date: client['Last Contact'],
+                  encounter_date: client['Last Contact'],
+                  service_date: client['Last Contact'],
+                  encounter_type: 'Follow-up Contact',
+                  service_type: client['Notes']?.includes('Transportation') ? 'Transportation' : 
+                               client['Notes']?.includes('food') ? 'Food/Water' : 'General Support',
+                  services_provided: [client['Notes']?.includes('Transportation') ? 'Transportation' : 'General Support'],
+                  location: client['AKA'] || 'Unknown Location',
+                  notes: client['Notes']?.trim() || '',
+                  worker_name: 'System Import',
+                  contact_count: client['Contacts'] ? parseInt(client['Contacts']) : 1,
+                  created_at: client['Last Contact'] ? new Date(client['Last Contact']).toISOString() : null,
+                  source: 'imported_client_data'
+                });
+              }
+            });
+            
+            allData = interactionRecords;
+            console.log(`📦 Generated ${interactionRecords.length} interaction records from ${clientsData.length} clients for export`);
+            
+          } else {
+            // Transform clientsData.json structure to match database format for clients
+            const transformedData = clientsData.map((client: any, index: number) => ({
+              // Generate a consistent ID based on client data
+              id: client.id || `client_${index}_${client['First Name']?.trim()}_${client['Date Created']}`,
+              first_name: client['First Name']?.trim() || '',
+              middle: client['Middle']?.trim() || '',
+              last_name: client['Last Name']?.trim() || '',
+              aka: client['AKA']?.trim() || '',
+              gender: client['Gender'] || 'N/A',
+              ethnicity: client['Ethnicity']?.trim() || '',
+              age: client['Age'] ? parseInt(client['Age']) : null,
+              height: client['Height']?.trim() || '',
+              weight: client['Weight']?.trim() || '0 lbs',
+              hair: client['Hair']?.trim() || '',
+              eyes: client['Eyes']?.trim() || '',
+              description: client['Description']?.trim() || '',
+              notes: client['Notes']?.trim() || '',
+              last_contact: client['Last Contact'] === 'Never' ? null : client['Last Contact'],
+              contacts: client['Contacts'] ? parseInt(client['Contacts']) : 0,
+              date_created: client['Date Created'],
+              created_at: client['Date Created'] ? new Date(client['Date Created']).toISOString() : null,
+              updated_at: client['Last Contact'] && client['Last Contact'] !== 'Never' ? new Date(client['Last Contact']).toISOString() : (client['Date Created'] ? new Date(client['Date Created']).toISOString() : null),
+              source: 'imported_client_data'
+            }));
+            
+            allData = transformedData;
+            console.log(`📦 Transformed ${transformedData.length} clients from JSON format for export`);
+          }
         }
       } catch (importError) {
         console.warn('❌ Failed to import clientsData.json for export:', importError);
