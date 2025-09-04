@@ -96,8 +96,8 @@ const DataExporter: React.FC = () => {
             last_contact: client['Last Contact'] === 'Never' ? null : client['Last Contact'],
             contacts: client['Contacts'] ? parseInt(client['Contacts']) : 0,
             date_created: client['Date Created'],
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            created_at: client['Date Created'] ? new Date(client['Date Created']).toISOString() : null,
+            updated_at: client['Last Contact'] && client['Last Contact'] !== 'Never' ? new Date(client['Last Contact']).toISOString() : (client['Date Created'] ? new Date(client['Date Created']).toISOString() : null),
             source: 'imported_client_data'
           }));
           
@@ -264,8 +264,8 @@ const DataExporter: React.FC = () => {
             last_contact: client['Last Contact'] === 'Never' ? null : client['Last Contact'],
             contacts: client['Contacts'] ? parseInt(client['Contacts']) : 0,
             date_created: client['Date Created'],
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            created_at: client['Date Created'] ? new Date(client['Date Created']).toISOString() : null,
+            updated_at: client['Last Contact'] && client['Last Contact'] !== 'Never' ? new Date(client['Last Contact']).toISOString() : (client['Date Created'] ? new Date(client['Date Created']).toISOString() : null),
             source: 'imported_client_data'
           }));
           
@@ -377,8 +377,17 @@ const DataExporter: React.FC = () => {
       }
 
       console.log(`📦 Exporting ${exportData.length} ${options.dataType} records`);
+      
+      if (exportData.length === 0) {
+        console.error('❌ No data to export! Check data loading and filtering.');
+        alert('No data found to export. Please check your date range and data source.');
+        return;
+      }
+      
       const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm-ss');
       const filename = `${options.dataType}_export_${timestamp}`;
+      
+      console.log(`📦 Starting ${options.format} export with filename: ${filename}`);
 
       if (options.format === 'csv') {
         exportToCSV(exportData, filename);
@@ -396,9 +405,15 @@ const DataExporter: React.FC = () => {
   };
 
   const exportToCSV = (data: any[], filename: string) => {
-    if (data.length === 0) return;
+    console.log(`📄 Generating CSV export for ${data.length} records`);
+    if (data.length === 0) {
+      console.error('❌ CSV Export: No data provided');
+      return;
+    }
     
     const headers = Object.keys(data[0]);
+    console.log(`📄 CSV headers: ${headers.join(', ')}`);
+    
     const csvContent = [
       headers.join(','),
       ...data.map(row => 
@@ -413,7 +428,9 @@ const DataExporter: React.FC = () => {
       )
     ].join('\n');
 
+    console.log(`📄 CSV content generated, size: ${csvContent.length} characters`);
     downloadFile(csvContent, `${filename}.csv`, 'text/csv;charset=utf-8;');
+    console.log(`📄 CSV download initiated: ${filename}.csv`);
   };
 
   const exportToExcel = (data: any[], filename: string) => {

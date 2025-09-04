@@ -278,60 +278,87 @@ const ReportsAndAnalytics: React.FC = () => {
         }
       }
       
-      // 2. Load from Supabase (live database data)
-      try {
-        const { data: supabaseInteractions, error } = await supabase
-          .from('client_interactions')
-          .select('*')
-          .order('interaction_date', { ascending: false });
-          
-        if (!error && supabaseInteractions) {
-          console.log(`📊 Loaded ${supabaseInteractions.length} interactions from Supabase`);
-          // Deep copy to ensure isolation
-          allEncounters = JSON.parse(JSON.stringify([...allEncounters, ...supabaseInteractions]));
+      // 2. Load from Supabase ONLY if no clientsData.json was found
+      if (allEncounters.length === 0) {
+        console.log('📊 No clientsData.json found, falling back to Supabase data...');
+        
+        try {
+          const { data: supabaseInteractions, error } = await supabase
+            .from('client_interactions')
+            .select('*')
+            .order('interaction_date', { ascending: false });
+            
+          if (!error && supabaseInteractions) {
+            console.log(`📊 Loaded ${supabaseInteractions.length} interactions from Supabase`);
+            allEncounters = JSON.parse(JSON.stringify([...allEncounters, ...supabaseInteractions]));
+          }
+        } catch (supabaseError) {
+          console.warn('Supabase interactions loading failed:', supabaseError);
         }
-      } catch (supabaseError) {
-        console.warn('Supabase data loading failed:', supabaseError);
+        
+        // Also try loading clients from Supabase if no interactions found
+        if (allEncounters.length === 0) {
+          try {
+            console.log('🔍 Loading clients from Supabase as last resort...');
+            const { data: supabaseClients, error: clientError } = await supabase
+              .from('clients')
+              .select('*')
+              .order('created_at', { ascending: false });
+              
+            if (!clientError && supabaseClients && supabaseClients.length > 0) {
+              console.log(`📊 FOUND ${supabaseClients.length} TOTAL CLIENTS in database`);
+              
+              // Transform Supabase clients into encounter format (but use original dates, not upload dates)
+              const clientEncounters: any[] = [];
+              
+              supabaseClients.forEach((client: any, clientIndex: number) => {
+                // Only use date_created and last_contact, avoid upload timestamps
+                if (client.date_created) {
+                  clientEncounters.push({
+                    id: `supabase_client_${client.id}_created`,
+                    client_id: client.id,
+                    first_name: client.first_name || '',
+                    last_name: client.last_name || '',
+                    interaction_date: client.date_created,
+                    date: client.date_created,
+                    encounter_type: 'Initial Registration',
+                    service_type: 'Registration',
+                    location: client.aka || 'Unknown Location',
+                    source: 'supabase_client_data'
+                  });
+                }
+                
+                if (client.last_contact && client.last_contact !== client.date_created) {
+                  clientEncounters.push({
+                    id: `supabase_client_${client.id}_last_contact`,
+                    client_id: client.id,
+                    first_name: client.first_name || '',
+                    last_name: client.last_name || '',
+                    interaction_date: client.last_contact,
+                    date: client.last_contact,
+                    encounter_type: 'Follow-up Contact',
+                    service_type: client.notes?.includes('Transportation') ? 'Transportation' : 'General Support',
+                    location: client.aka || 'Unknown Location',
+                    source: 'supabase_client_data'
+                  });
+                }
+              });
+              
+              allEncounters = clientEncounters;
+              console.log(`📊 Generated ${clientEncounters.length} encounters from Supabase clients`);
+            } else {
+              console.error('❌ NO CLIENT DATA FOUND OR ERROR:', clientError);
+            }
+          } catch (clientError) {
+            console.error('❌ CRITICAL ERROR loading clients:', clientError);
+          }
+        }
       }
       
-      // 3. Load ALL client data and convert to encounters (CRITICAL FIX)
-      try {
-        console.log('🔍 CRITICAL: Loading ALL client data for analytics...');
-        const { data: supabaseClients, error: clientError } = await supabase
-          .from('clients')
-          .select('*')
-          .order('created_at', { ascending: false });
-          
-        if (!clientError && supabaseClients && supabaseClients.length > 0) {
-          console.log(`📊 FOUND ${supabaseClients.length} TOTAL CLIENTS in database`);
-          
-          const clientsWithContacts = supabaseClients.filter(client => client.contacts > 0);
-          console.log(`📊 CLIENTS WITH CONTACTS: ${clientsWithContacts.length}`);
-          
-          // Calculate total encounters we should generate
-          const totalExpectedEncounters = clientsWithContacts.reduce((sum, client) => sum + (client.contacts || 0), 0);
-          console.log(`📊 EXPECTED TOTAL ENCOUNTERS: ${totalExpectedEncounters}`);
-          
-          // SIMPLIFIED CLIENT TO ENCOUNTER CONVERSION
-          const clientAsEncounters: any[] = [];
-          
-          // Get current time range safely
-          const currentTimeRange = parseInt(timeRange) || 90;
-          console.log(`📅 Generating encounters for time range: ${currentTimeRange} days`);
-          
-          // Calculate total encounters to generate
-          const totalEncounters = clientsWithContacts.reduce((sum, client) => sum + (client.contacts || 1), 0);
-          console.log(`📊 Total encounters to distribute: ${totalEncounters}`);
-          
-          // Use map instead of forEach to create completely new data
-          const generatedEncounters: any[] = [];
-          let encounterIndex = 0;
-          
-          clientsWithContacts.forEach(client => {
-            // Create encounters based on contact count
-            const contactCount = client.contacts || 1;
-            
-            for (let i = 0; i < contactCount; i++) {
+      console.log(`📊 Total encounters for analytics: ${allEncounters.length}`);
+      
+      // SIMPLIFIED FILTERING - Keep all encounters from imported client data
+      const validEncounters = allEncounters.filter(encounter => {
               // Generate dates with proper distribution across the full time range
               const today = new Date();
               
