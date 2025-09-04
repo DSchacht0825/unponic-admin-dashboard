@@ -1149,8 +1149,8 @@ const ReportsAndAnalytics: React.FC = () => {
         </Box>
       </Box>
 
-      {/* Charts */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+      {/* Charts - TEMPORARILY DISABLED FOR DEBUGGING */}
+      <Box sx={{ display: 'none', flexWrap: 'wrap', gap: 3 }}>
         {/* Encounter Trends */}
         <Paper sx={{ flex: '1 1 600px', p: 3, minWidth: '600px' }}>
           <Typography variant="h6" gutterBottom>
