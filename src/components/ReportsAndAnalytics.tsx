@@ -109,6 +109,25 @@ const ReportsAndAnalytics: React.FC = () => {
     loadAnalyticsData();
   }, [timeRange]);
 
+  // Function to ensure data is completely mutable
+  const makeMutable = (obj: any): any => {
+    if (obj === null || typeof obj !== 'object') {
+      return obj;
+    }
+    
+    if (Array.isArray(obj)) {
+      return obj.map(makeMutable);
+    }
+    
+    const result: any = {};
+    for (const key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        result[key] = makeMutable(obj[key]);
+      }
+    }
+    return result;
+  };
+
   const loadAnalyticsData = async () => {
     setLoading(true);
     setError(null);
@@ -540,9 +559,9 @@ const ReportsAndAnalytics: React.FC = () => {
         };
       });
 
-    // Deep clone to ensure immutability and prevent readonly errors
-    const immutableTrends = JSON.parse(JSON.stringify(trends));
-    setEncounterTrends(immutableTrends);
+    // Ensure trends data is completely mutable
+    const mutableTrends = makeMutable(trends);
+    setEncounterTrends(mutableTrends);
     } catch (error) {
       console.error('❌ Error in loadEncounterTrends:', error);
       setEncounterTrends([]); // Set empty array as fallback
@@ -651,9 +670,9 @@ const ReportsAndAnalytics: React.FC = () => {
     
     console.log('📈 Final service distribution:', distribution);
     
-    // Deep clone to ensure immutability and prevent readonly errors
-    const immutableDistribution = JSON.parse(JSON.stringify(distribution));
-    setServiceDistribution(immutableDistribution);
+    // Ensure distribution data is completely mutable
+    const mutableDistribution = makeMutable(distribution);
+    setServiceDistribution(mutableDistribution);
     } catch (error) {
       console.error('❌ Error in loadServiceDistribution:', error);
       setServiceDistribution([]); // Set empty array as fallback
@@ -740,9 +759,9 @@ const ReportsAndAnalytics: React.FC = () => {
         lng: data.lng
       }));
 
-    // Deep clone to ensure immutability and prevent readonly errors
-    const immutableHotspots = JSON.parse(JSON.stringify(hotspots));
-    setLocationHotspots(immutableHotspots);
+    // Ensure hotspots data is completely mutable
+    const mutableHotspots = makeMutable(hotspots);
+    setLocationHotspots(mutableHotspots);
   };
 
   const loadUserProductivity = async (encounters: any[]) => {
@@ -805,9 +824,9 @@ const ReportsAndAnalytics: React.FC = () => {
       .sort((a, b) => b.encounters - a.encounters)
       .slice(0, 5);
 
-    // Deep clone to ensure immutability and prevent readonly errors
-    const immutableProductivity = JSON.parse(JSON.stringify(productivity));
-    setUserProductivity(immutableProductivity);
+    // Ensure productivity data is completely mutable
+    const mutableProductivity = makeMutable(productivity);
+    setUserProductivity(mutableProductivity);
     } catch (error) {
       console.error('❌ Error in loadUserProductivity:', error);
       setUserProductivity([]); // Set empty array as fallback
@@ -903,9 +922,9 @@ const ReportsAndAnalytics: React.FC = () => {
         services: stats.services
       }));
 
-    // Deep clone to ensure immutability and prevent readonly errors
-    const immutableComparison = JSON.parse(JSON.stringify(comparison));
-    setMonthlyComparison(immutableComparison);
+    // Ensure comparison data is completely mutable
+    const mutableComparison = makeMutable(comparison);
+    setMonthlyComparison(mutableComparison);
     } catch (error) {
       console.error('❌ Error in loadMonthlyComparison:', error);
       setMonthlyComparison([]); // Set empty array as fallback
@@ -981,9 +1000,9 @@ const ReportsAndAnalytics: React.FC = () => {
       activeClients: totalActiveClients
     };
     
-    // Deep clone to ensure immutability and prevent readonly errors
-    const immutableStats = JSON.parse(JSON.stringify(statsData));
-    setTotalStats(immutableStats);
+    // Ensure stats data is completely mutable
+    const mutableStats = makeMutable(statsData);
+    setTotalStats(mutableStats);
     } catch (error) {
       console.error('❌ Error in loadTotalStats:', error);
       setTotalStats({ totalEncounters: 0, totalIndividuals: 0, totalServices: 0, activeClients: 0 });
@@ -1014,9 +1033,7 @@ const ReportsAndAnalytics: React.FC = () => {
   };
 
   const handleTimeRangeChange = (event: SelectChangeEvent) => {
-    // Emergency fix: Force page reload to bypass readonly errors
-    window.location.hash = `timeRange=${event.target.value}`;
-    window.location.reload();
+    setTimeRange(event.target.value);
   };
 
   if (loading) {
