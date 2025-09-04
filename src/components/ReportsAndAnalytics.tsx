@@ -263,7 +263,25 @@ const ReportsAndAnalytics: React.FC = () => {
               const randomOffset = Math.floor(Math.random() * Math.min(3, currentTimeRange / 10));
               const finalDaysBack = Math.min(daysBack + randomOffset, currentTimeRange - 1);
               
-              const encounterDate = new Date(today.getTime() - (finalDaysBack * 24 * 60 * 60 * 1000));
+              // IMPORTANT: For realistic data, use more spread out dates
+              // Instead of just subtracting days, ensure we get a good spread
+              let encounterDate;
+              if (currentTimeRange <= 7) {
+                // For 7 days, use recent dates
+                encounterDate = new Date(today.getTime() - (finalDaysBack * 24 * 60 * 60 * 1000));
+              } else if (currentTimeRange <= 30) {
+                // For 30 days, spread more evenly
+                const daySpread = Math.floor((encounterIndex / totalEncounters) * 30) + Math.floor(Math.random() * 5);
+                encounterDate = new Date(today.getTime() - (daySpread * 24 * 60 * 60 * 1000));
+              } else if (currentTimeRange <= 90) {
+                // For 90 days, use wider spread
+                const daySpread = Math.floor((encounterIndex / totalEncounters) * 90) + Math.floor(Math.random() * 10);
+                encounterDate = new Date(today.getTime() - (daySpread * 24 * 60 * 60 * 1000));
+              } else {
+                // For 365 days, use very wide spread
+                const daySpread = Math.floor((encounterIndex / totalEncounters) * 365) + Math.floor(Math.random() * 30);
+                encounterDate = new Date(today.getTime() - (daySpread * 24 * 60 * 60 * 1000));
+              }
               const dateString = encounterDate.toISOString().split('T')[0];
               
               console.log(`✅ Generated encounter ${encounterIndex + 1}/${totalEncounters} for ${client.first_name}: ${dateString} (${finalDaysBack} days back, range=${currentTimeRange})`);  
