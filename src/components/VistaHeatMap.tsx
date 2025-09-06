@@ -654,12 +654,12 @@ const VistaHeatMap: React.FC = () => {
               <Polygon
                 positions={vistaPolygon}
                 pathOptions={{
-                  color: '#4CAF50',
-                  weight: 2,
-                  opacity: 0.7,
-                  fillColor: '#4CAF50',
-                  fillOpacity: 0.05,
-                  dashArray: '5, 5'
+                  color: '#FF6B35',
+                  weight: 4,
+                  opacity: 1.0,
+                  fillColor: '#FF6B35',
+                  fillOpacity: 0.15,
+                  dashArray: '8, 4'
                 }}
               >
                 <Popup>
