@@ -1079,6 +1079,7 @@ const ReportsAndAnalytics: React.FC = () => {
       monthlyComparison,
     };
 
+    // Export JSON data
     const dataStr = JSON.stringify(reportData, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
     
@@ -1088,6 +1089,101 @@ const ReportsAndAnalytics: React.FC = () => {
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
     linkElement.click();
+  };
+
+  const handleExportReportWithCharts = async () => {
+    try {
+      // Create a comprehensive report document
+      const reportDate = new Date().toISOString().split('T')[0];
+      
+      // Generate detailed service breakdown data
+      const serviceBreakdown = serviceDistribution.map(service => ({
+        service: service.name,
+        count: service.value,
+        percentage: ((service.value / serviceDistribution.reduce((sum, s) => sum + s.value, 0)) * 100).toFixed(1)
+      }));
+      
+      // Generate time-based service trends
+      const serviceTrends = encounterTrends.map(trend => ({
+        date: trend.date,
+        totalEncounters: trend.encounters,
+        services: trend.services || []
+      }));
+
+      // Create detailed analytics report
+      const analyticsReport = {
+        reportMetadata: {
+          generatedAt: new Date().toISOString(),
+          timeRange: `${timeRange} days`,
+          reportTitle: `Outreach Analytics Report - ${reportDate}`
+        },
+        executiveSummary: {
+          totalEncounters: totalStats.totalEncounters,
+          totalIndividuals: totalStats.totalIndividuals,
+          totalServices: totalStats.totalServices,
+          activeClients: totalStats.activeClients,
+          averageEncountersPerDay: (totalStats.totalEncounters / parseInt(timeRange)).toFixed(1),
+          averageServicesPerEncounter: (totalStats.totalServices / totalStats.totalEncounters || 0).toFixed(1)
+        },
+        serviceBreakdown: {
+          summary: `Top services provided during ${timeRange}-day period`,
+          data: serviceBreakdown,
+          insights: [
+            `Most common service: ${serviceBreakdown[0]?.service || 'N/A'} (${serviceBreakdown[0]?.percentage || '0'}%)`,
+            `Service diversity: ${serviceBreakdown.length} different service types provided`,
+            `Service concentration: Top 3 services account for ${(serviceBreakdown.slice(0, 3).reduce((sum, s) => sum + parseFloat(s.percentage), 0)).toFixed(1)}% of all services`
+          ]
+        },
+        encounterTrends: {
+          summary: `Daily encounter patterns over ${timeRange} days`,
+          data: serviceTrends,
+          insights: [
+            `Peak encounter day: ${encounterTrends.reduce((max, current) => current.encounters > max.encounters ? current : max, encounterTrends[0])?.date || 'N/A'}`,
+            `Average daily encounters: ${(totalStats.totalEncounters / parseInt(timeRange)).toFixed(1)}`,
+            `Trend: ${encounterTrends.length > 1 ? (encounterTrends[encounterTrends.length - 1].encounters > encounterTrends[0].encounters ? 'Increasing' : 'Decreasing') : 'Stable'}`
+          ]
+        },
+        userProductivity: {
+          summary: 'Worker performance and productivity metrics',
+          data: userProductivity,
+          insights: [
+            `Most active worker: ${userProductivity[0]?.name || 'N/A'} (${userProductivity[0]?.encounters || 0} encounters)`,
+            `Total active workers: ${userProductivity.length}`,
+            `Average encounters per worker: ${userProductivity.length ? (userProductivity.reduce((sum, u) => sum + u.encounters, 0) / userProductivity.length).toFixed(1) : '0'}`
+          ]
+        },
+        locationAnalysis: {
+          summary: 'Geographic distribution of outreach activities',
+          data: locationHotspots,
+          insights: locationHotspots.length > 0 ? [
+            `Primary hotspot: ${locationHotspots[0]?.location || 'N/A'} (${locationHotspots[0]?.encounters || 0} encounters)`,
+            `Geographic spread: ${locationHotspots.length} distinct locations`,
+            `Location concentration: ${((locationHotspots[0]?.encounters || 0) / totalStats.totalEncounters * 100).toFixed(1)}% of encounters at primary location`
+          ] : ['No location data available']
+        },
+        chartData: {
+          serviceDistributionChart: serviceDistribution,
+          encounterTrendsChart: encounterTrends,
+          userProductivityChart: userProductivity,
+          monthlyComparisonChart: monthlyComparison
+        }
+      };
+
+      // Export the enhanced report
+      const enhancedDataStr = JSON.stringify(analyticsReport, null, 2);
+      const enhancedDataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(enhancedDataStr);
+      
+      const enhancedFileName = `outreach-analytics-report-${reportDate}.json`;
+      
+      const linkElement = document.createElement('a');
+      linkElement.setAttribute('href', enhancedDataUri);
+      linkElement.setAttribute('download', enhancedFileName);
+      linkElement.click();
+      
+      console.log('Enhanced analytics report exported successfully');
+    } catch (error) {
+      console.error('Error exporting enhanced report:', error);
+    }
   };
 
   const handleTimeRangeChange = (event: SelectChangeEvent) => {
@@ -1139,7 +1235,15 @@ const ReportsAndAnalytics: React.FC = () => {
             startIcon={<Download />}
             onClick={handleExportReport}
           >
-            Export Report
+            Export Data
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<Download />}
+            onClick={handleExportReportWithCharts}
+            sx={{ ml: 1 }}
+          >
+            Export Analytics Report
           </Button>
         </Box>
       </Box>
