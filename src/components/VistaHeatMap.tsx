@@ -105,7 +105,7 @@ const vistaPolygon: [number, number][] = [
   [vistaPoints[0].lat, vistaPoints[0].lng] // Close the polygon
 ];
 
-// ERF3 boundary coordinates
+// ERF3 boundary coordinates - Original coordinates provided by user
 const erf3Points = [
   { name: 'ERF3 Point 1', lat: 33.183536, lng: -117.278574 },
   { name: 'ERF3 Point 2', lat: 33.195840, lng: -117.282195 },
