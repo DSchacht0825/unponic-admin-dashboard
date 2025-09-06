@@ -359,111 +359,9 @@ const ReportsAndAnalytics: React.FC = () => {
       
       // SIMPLIFIED FILTERING - Keep all encounters from imported client data
       const validEncounters = allEncounters.filter(encounter => {
-              // Generate dates with proper distribution across the full time range
-              const today = new Date();
-              
-              // Calculate a realistic distribution based on encounter index
-              let daySpread;
-              
-              if (currentTimeRange <= 7) {
-                // 7 days: spread evenly across 0-6 days back
-                daySpread = Math.floor((encounterIndex / totalEncounters) * 7);
-              } else if (currentTimeRange <= 30) {
-                // 30 days: spread across 0-29 days back with some clustering in recent days
-                const baseDays = Math.floor((encounterIndex / totalEncounters) * 30);
-                const recentBias = Math.random() < 0.3 ? Math.floor(Math.random() * 7) : 0; // 30% chance of recent date
-                daySpread = Math.min(baseDays + recentBias, 29);
-              } else if (currentTimeRange <= 90) {
-                // 90 days: good spread across 0-89 days back
-                const baseDays = Math.floor((encounterIndex / totalEncounters) * 90);
-                const randomVariation = Math.floor(Math.random() * 14) - 7; // ±7 days variation
-                daySpread = Math.max(0, Math.min(baseDays + randomVariation, 89));
-              } else {
-                // 365 days: spread across full year
-                const baseDays = Math.floor((encounterIndex / totalEncounters) * 365);
-                const randomVariation = Math.floor(Math.random() * 60) - 30; // ±30 days variation
-                daySpread = Math.max(0, Math.min(baseDays + randomVariation, 364));
-              }
-              
-              const encounterDate = new Date(today.getTime() - (daySpread * 24 * 60 * 60 * 1000));
-              const dateString = encounterDate.toISOString().split('T')[0];
-              
-              console.log(`✅ Generated encounter ${encounterIndex + 1}/${totalEncounters} for ${client.first_name}: ${dateString} (${daySpread} days back, range=${currentTimeRange})`);  
-              
-              // Create fresh service array for each encounter
-              const serviceList = [];
-              if (i === 0) serviceList.push('Initial Contact');
-              if (client.contacts > 1) serviceList.push('Follow-up Contact');
-              if (client.notes && client.notes.toLowerCase().includes('food')) serviceList.push('Food Services');
-              if (client.notes && client.notes.toLowerCase().includes('housing')) serviceList.push('Housing Services');
-              if (client.notes && client.notes.toLowerCase().includes('medical')) serviceList.push('Medical Services');
-              if (client.notes && client.notes.toLowerCase().includes('mental')) serviceList.push('Mental Health Services');
-              
-              // Default service if none found
-              if (serviceList.length === 0) serviceList.push('General Contact');
-              
-              // Create a completely isolated encounter object
-              generatedEncounters.push({
-                id: `client-${client.id}-contact-${i + 1}`,
-                client_id: String(client.id),
-                client_name: `${client.first_name || ''} ${client.last_name || ''}`.trim(),
-                interaction_date: String(dateString),
-                encounter_date: String(dateString),
-                date: String(dateString),
-                created_at: String(dateString),
-                timestamp: String(dateString),
-                worker_name: 'Data Import',
-                worker: 'Data Import',
-                services_provided: JSON.parse(JSON.stringify(serviceList)), // Deep copy
-                services: JSON.parse(JSON.stringify(serviceList)), // Deep copy
-                service_type: String(serviceList[0]),
-                notes: `Client: ${client.first_name || ''} ${client.last_name || ''} - Contact ${i + 1} of ${contactCount}`,
-                location_lat: null,
-                location_lng: null,
-                contact_count: Number(contactCount),
-                encounter_number: Number(i + 1),
-                source: 'imported_client_data'
-              });
-              
-              encounterIndex++;
-            }
-          });
-          
-          // Add all generated encounters
-          clientAsEncounters.push(...generatedEncounters);
-          
-          console.log(`📈 GENERATED ${clientAsEncounters.length} ENCOUNTERS from ${clientsWithContacts.length} clients for ${timeRange}-day range`);
-          console.log('📊 Sample encounters with dates:', clientAsEncounters.slice(0, 5).map(e => ({
-            id: e.id,
-            date: e.date,
-            services: e.services,
-            client: e.client_name,
-            timeRange: timeRange
-          })));
-          
-          // Verify date distribution
-          const dateCounts: { [key: string]: number } = {};
-          clientAsEncounters.forEach(e => {
-            const date = e.date;
-            dateCounts[date] = (dateCounts[date] || 0) + 1;
-          });
-          console.log('📅 Date distribution:', Object.keys(dateCounts).length, 'unique dates');
-          
-          // Deep copy to ensure complete isolation
-          allEncounters = JSON.parse(JSON.stringify([...allEncounters, ...clientAsEncounters]));
-        } else {
-          console.error('❌ NO CLIENT DATA FOUND OR ERROR:', clientError);
-        }
-      } catch (clientError) {
-        console.error('❌ CRITICAL ERROR loading clients:', clientError);
-      }
-      
-      console.log(`📊 Total encounters for analytics: ${allEncounters.length}`);
-      
-      // SIMPLIFIED FILTERING - Keep all encounters from imported client data
-      const validEncounters = allEncounters.filter(encounter => {
         // Always keep client-based encounters (our imported data)
         if (encounter.source === 'imported_client_data' || 
+            encounter.source === 'supabase_client_data' ||
             (encounter.id && encounter.id.toString().startsWith('client-'))) {
           return true;
         }
@@ -475,10 +373,12 @@ const ReportsAndAnalytics: React.FC = () => {
         return hasValidDate;
       });
       
-      console.log(`📊 Valid encounters after filtering import check: ${validEncounters.length}`);
+      console.log(`📊 Total encounters for analytics: ${allEncounters.length}`);
+      
+      console.log(`📊 Valid encounters after filtering: ${validEncounters.length}`);
       
       if (validEncounters.length > 0) {
-        console.log('📋 Sample valid encounters:', validEncounters.slice(0, 3).map(e => ({
+        console.log('📋 Sample valid encounters:', validEncounters.slice(0, 3).map((e: any) => ({
           id: e.id,
           date: e.interaction_date || e.date || e.created_at,
           services: e.services_provided || e.services,
@@ -494,12 +394,12 @@ const ReportsAndAnalytics: React.FC = () => {
       // Process all analytics with the filtered valid data
       try {
         await Promise.all([
-          loadEncounterTrends(validEncounters).catch(e => console.error('Encounter trends error:', e)),
-          loadServiceDistribution(validEncounters).catch(e => console.error('Service distribution error:', e)),
-          loadLocationHotspots(validEncounters).catch(e => console.error('Location hotspots error:', e)),
-          loadUserProductivity(validEncounters).catch(e => console.error('User productivity error:', e)),
-          loadMonthlyComparison(validEncounters).catch(e => console.error('Monthly comparison error:', e)),
-          loadTotalStats(validEncounters).catch(e => console.error('Total stats error:', e))
+          loadEncounterTrends(validEncounters).catch((e: any) => console.error('Encounter trends error:', e)),
+          loadServiceDistribution(validEncounters).catch((e: any) => console.error('Service distribution error:', e)),
+          loadLocationHotspots(validEncounters).catch((e: any) => console.error('Location hotspots error:', e)),
+          loadUserProductivity(validEncounters).catch((e: any) => console.error('User productivity error:', e)),
+          loadMonthlyComparison(validEncounters).catch((e: any) => console.error('Monthly comparison error:', e)),
+          loadTotalStats(validEncounters).catch((e: any) => console.error('Total stats error:', e))
         ]);
         
         console.log('✅ All analytics functions completed successfully');
