@@ -49,7 +49,9 @@ interface ImportedClientData {
   'Height'?: string;
   'Weight'?: string;
   'Hair'?: string;
+  'Hair Color'?: string;
   'Eyes'?: string;
+  'Eye Color'?: string;
   'Description'?: string;
   'Notes'?: string;
   'Last Contact'?: string;
@@ -132,7 +134,7 @@ const ClientImporter: React.FC = () => {
       localStorage.removeItem('clientEncounters');
 
       // Process the uploaded data using the same logic as processImport
-      await processExcelData(jsonData);
+      await processExcelData(jsonData, true); // clearExisting = true for fresh upload
 
     } catch (error) {
       console.error('Error reading file:', error);
@@ -146,19 +148,11 @@ const ClientImporter: React.FC = () => {
     }
   };
 
-  const processExcelData = async (jsonData: ImportedClientData[]) => {
+  const processExcelData = async (jsonData: ImportedClientData[], clearExisting = false) => {
     console.log(`Processing ${jsonData.length} records...`);
 
     const processedClients: ProcessedClient[] = [];
     const errors: string[] = [];
-    
-    // Vista area coordinates for random location assignment
-    const vistaCoords = {
-      minLat: 33.185,
-      maxLat: 33.210,
-      minLng: -117.260,
-      maxLng: -117.230
-    };
 
     for (let index = 0; index < jsonData.length; index++) {
       const row = jsonData[index];
@@ -230,23 +224,24 @@ const ClientImporter: React.FC = () => {
           middleName: row.Middle || '',
           lastName: row['Last Name'] || '',
           aka: row.AKA || '',
+          dateAdded: dateCreated,
+          lastContact,
+          status: 'active' as const,
           gender: row.Gender || '',
           ethnicity: row.Ethnicity || '',
           age: age,
           height: row.Height || '',
           weight: row.Weight || '',
-          hairColor: row['Hair Color'] || '',
-          eyeColor: row['Eye Color'] || '',
-          description: row.Description || '',
-          dateCreated,
-          lastContact,
+          hairColor: row['Hair Color'] || row['Hair'] || '',
+          eyeColor: row['Eye Color'] || row['Eyes'] || '',
+          physicalDescription: row.Description || '',
           contactCount: parseInt(row.Contacts?.toString() || '1'),
           notes,
+          tags: [],
           location: {
-            coordinates,
-            address: locationAddress,
-            timestamp: new Date(),
-            accuracy: matchWithCoords ? 'high' : 'estimated'
+            lat: coordinates.lat,
+            lng: coordinates.lng,
+            address: locationAddress
           }
         };
 
@@ -267,19 +262,41 @@ const ClientImporter: React.FC = () => {
     console.log(`Processed ${processedClients.length} clients`);
 
     // Save to localStorage
-    localStorage.setItem('activeClients', JSON.stringify(processedClients.map(client => ({
+    const existingClients = clearExisting ? [] : JSON.parse(localStorage.getItem('activeClients') || '[]');
+    const allClients = [...existingClients, ...processedClients.map(client => ({
       id: client.id,
       name: `${client.firstName} ${client.lastName}`.trim(),
       firstName: client.firstName,
       lastName: client.lastName,
       aka: client.aka,
-      dateCreated: client.dateCreated,
+      dateCreated: client.dateAdded,
       lastContact: client.lastContact,
       contactCount: client.contactCount,
       notes: client.notes.map(note => note.note).join('; '),
       location: client.location?.address || 'Vista, CA',
-      coordinates: client.location?.coordinates
-    }))));
+      coordinates: { lat: client.location.lat, lng: client.location.lng }
+    }))];
+    
+    localStorage.setItem('activeClients', JSON.stringify(allClients));
+
+    // Also create encounter data for heat map visualization
+    const encounterData = processedClients.map(client => ({
+      id: `encounter-${client.id}`,
+      lat: client.location.lat,
+      lng: client.location.lng,
+      timestamp: client.lastContact,
+      notes: `Client: ${client.firstName} ${client.lastName}${client.aka ? ` (${client.aka})` : ''}${client.notes.length > 0 ? ` - ${client.notes[0].note}` : ''}`,
+      individualCount: 1,
+      services: client.notes.length > 0 ? [client.notes[0].category] : ['general']
+    }));
+
+    // Save encounter data for heat map
+    const existingEncounters = clearExisting ? [] : JSON.parse(localStorage.getItem('clientEncounters') || '[]');
+    const allEncounters = [...existingEncounters, ...encounterData];
+    localStorage.setItem('clientEncounters', JSON.stringify(allEncounters));
+    
+    console.log(`Created ${encounterData.length} encounters for heat map`);
+    console.log(`Total clients: ${allClients.length}, Total encounters: ${allEncounters.length}`);
 
     setImportStatus(prev => ({
       ...prev!,
@@ -313,168 +330,7 @@ const ClientImporter: React.FC = () => {
       console.log(`Found ${jsonData.length} records to import`);
 
       // Use the shared processing function
-      await processExcelData(jsonData);
-      const errors: string[] = [];
-      
-      // Vista area coordinates for random location assignment
-      const vistaCoords = {
-        minLat: 33.185,
-        maxLat: 33.210,
-        minLng: -117.260,
-        maxLng: -117.230
-      };
-
-      for (let index = 0; index < jsonData.length; index++) {
-        const row = jsonData[index];
-        try {
-          // Parse age
-          let age: number | undefined;
-          if (row.Age) {
-            const parsedAge = parseInt(row.Age.toString());
-            if (!isNaN(parsedAge)) age = parsedAge;
-          }
-
-          // Parse dates
-          let dateCreated = new Date();
-          if (row['Date Created']) {
-            const parsed = new Date(row['Date Created']);
-            if (!isNaN(parsed.getTime())) dateCreated = parsed;
-          }
-
-          let lastContact = new Date();
-          if (row['Last Contact']) {
-            const parsed = new Date(row['Last Contact']);
-            if (!isNaN(parsed.getTime())) lastContact = parsed;
-          }
-
-          // Extract location from AKA and Notes fields
-          let coordinates = { lat: 0, lng: 0 };
-          let locationAddress = 'Vista, CA';
-          
-          // Try to extract location from AKA field
-          const akaMatches = extractLocationFromText(row.AKA || '');
-          // Try to extract location from Notes field
-          const notesMatches = extractLocationFromText(row.Notes || '');
-          
-          // Combine all matches and prioritize those with coordinates
-          const allMatches = [...akaMatches, ...notesMatches];
-          const matchWithCoords = allMatches.find(match => match.coordinates);
-          
-          if (matchWithCoords && matchWithCoords.coordinates) {
-            // Use extracted coordinates
-            coordinates = matchWithCoords.coordinates;
-            locationAddress = `${matchWithCoords.extractedLocation}, Vista, CA`;
-            console.log(`Found location for ${row['First Name']}: ${matchWithCoords.extractedLocation}`);
-          } else if (allMatches.length > 0) {
-            // Has location text but no coordinates - use random Vista location
-            coordinates = getRandomVistaLocation();
-            locationAddress = `${allMatches[0].extractedLocation}, Vista, CA`;
-            console.log(`Using text location for ${row['First Name']}: ${allMatches[0].extractedLocation}`);
-          } else {
-            // No location data - use random Vista location
-            coordinates = getRandomVistaLocation();
-            if (row.AKA) {
-              locationAddress = `${row.AKA}, Vista, CA`;
-            }
-          }
-
-          // Create notes array from existing notes
-          const notes: ClientNote[] = [];
-          if (row.Notes) {
-            notes.push({
-              id: `import-${Date.now()}-${index}`,
-              date: dateCreated,
-              note: row.Notes,
-              author: 'Imported from Excel',
-              category: 'general'
-            });
-          }
-
-          // Determine tags based on data
-          const tags: string[] = [];
-          if (age && age >= 65) tags.push('elderly');
-          if (row.AKA) tags.push('has-alias');
-          if (parseInt(row.Contacts?.toString() || '0') > 5) tags.push('frequent-contact');
-
-          const client: ProcessedClient = {
-            id: `imported-${Date.now()}-${index}`,
-            firstName: row['First Name'] || 'Unknown',
-            middleName: row['Middle'] || undefined,
-            lastName: row['Last Name'] || '',
-            aka: row['AKA'] || undefined,
-            dateAdded: dateCreated,
-            lastContact: lastContact,
-            status: 'active',
-            location: {
-              lat: coordinates.lat,
-              lng: coordinates.lng,
-              address: locationAddress
-            },
-            notes,
-            tags,
-            age,
-            gender: row.Gender === 'N/A' ? undefined : row.Gender,
-            ethnicity: row.Ethnicity || undefined,
-            height: row.Height || undefined,
-            weight: row.Weight || undefined,
-            hairColor: row.Hair || undefined,
-            eyeColor: row.Eyes || undefined,
-            physicalDescription: row.Description || undefined,
-            contactCount: parseInt(row.Contacts?.toString() || '1')
-          };
-
-          processedClients.push(client);
-        } catch (err) {
-          console.error(`Error processing row ${index + 1}:`, err);
-          errors.push(`Row ${index + 1}: ${err}`);
-        }
-        
-        // Update progress more frequently
-        if (index % 25 === 0) {
-          console.log(`Processed ${index + 1} of ${jsonData.length} records`);
-          setImportStatus(prev => prev ? {
-            ...prev,
-            processed: index + 1
-          } : null);
-          
-          // Allow UI to update
-          await new Promise(resolve => setTimeout(resolve, 10));
-        }
-      }
-
-      console.log(`Processing complete. ${processedClients.length} clients processed.`);
-
-      // Save to localStorage
-      const existingClients = JSON.parse(localStorage.getItem('activeClients') || '[]');
-      const allClients = [...existingClients, ...processedClients];
-      localStorage.setItem('activeClients', JSON.stringify(allClients));
-      
-      console.log(`Saved ${allClients.length} total clients to localStorage`);
-
-      // Also create encounter data for heat map visualization
-      const encounterData = processedClients.map(client => ({
-        id: `encounter-${client.id}`,
-        lat: client.location.lat,
-        lng: client.location.lng,
-        timestamp: client.lastContact,
-        notes: `Client: ${client.firstName} ${client.lastName}${client.aka ? ` (${client.aka})` : ''}${client.notes.length > 0 ? ` - ${client.notes[0].note}` : ''}`,
-        individualCount: 1,
-        services: client.notes.length > 0 ? [client.notes[0].category] : ['general']
-      }));
-
-      // Save encounter data for heat map
-      const existingEncounters = JSON.parse(localStorage.getItem('clientEncounters') || '[]');
-      const allEncounters = [...existingEncounters, ...encounterData];
-      localStorage.setItem('clientEncounters', JSON.stringify(allEncounters));
-      
-      console.log(`Created ${encounterData.length} encounters for heat map`);
-      console.log(`Total encounters in system: ${allEncounters.length}`);
-
-      setImportStatus({
-        total: jsonData.length,
-        processed: processedClients.length,
-        errors
-      });
+      await processExcelData(jsonData, false); // clearExisting = false to append to existing
 
       setImporting(false);
       setShowPreview(false);
