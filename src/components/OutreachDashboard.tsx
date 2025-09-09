@@ -33,6 +33,7 @@ import {
   Tooltip,
 } from 'recharts';
 import { format } from 'date-fns';
+import CSVImporter from './CSVImporter';
 
 interface OutreachActivity {
   type: string;
@@ -65,12 +66,20 @@ const OutreachDashboard: React.FC = () => {
   const [serviceBreakdown, setServiceBreakdown] = useState<ServiceBreakdown[]>([]);
   const [monthlyActivity, setMonthlyActivity] = useState<MonthlyActivity[]>([]);
   const [locations, setLocations] = useState<string[]>([]);
+  const [clientData, setClientData] = useState<any[]>([]);
 
   useEffect(() => {
     if (timeRange !== 'CUSTOM') {
       loadOutreachData();
     }
   }, [timeRange, selectedLocation]);
+
+  useEffect(() => {
+    if (clientData.length > 0) {
+      processOutreachData(clientData);
+      setLoading(false);
+    }
+  }, [clientData, timeRange, selectedLocation]);
 
   const loadOutreachData = async () => {
     setLoading(true);
@@ -89,7 +98,8 @@ const OutreachDashboard: React.FC = () => {
 
       console.log(`📊 Processing ${clientsData.length} client records`);
 
-      // Process the data
+      // Store the data and process it
+      setClientData(clientsData);
       processOutreachData(clientsData);
       
     } catch (error) {
@@ -317,6 +327,14 @@ const OutreachDashboard: React.FC = () => {
     }
   };
 
+  const handleDataImported = (importedData: any[]) => {
+    console.log(`📊 New data imported: ${importedData.length} records`);
+    setClientData(importedData);
+    setLoading(true);
+    processOutreachData(importedData);
+    setLoading(false);
+  };
+
   const handleLocationChange = (event: SelectChangeEvent) => {
     setSelectedLocation(event.target.value);
   };
@@ -338,6 +356,9 @@ const OutreachDashboard: React.FC = () => {
 
   return (
     <Box sx={{ p: 3, backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
+      {/* CSV Importer */}
+      <CSVImporter onDataImported={handleDataImported} />
+
       {/* Header */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#333' }}>

@@ -110,6 +110,9 @@ const ClientImporter: React.FC = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    setImporting(true);
+    console.log('Starting fresh file import...');
+
     try {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
@@ -120,9 +123,17 @@ const ClientImporter: React.FC = () => {
         dateNF: 'MM/DD/YYYY'
       });
 
-      setPreviewData(jsonData.slice(0, 5)); // Show first 5 for preview
-      setShowPreview(true);
+      console.log(`Processing ${jsonData.length} records from uploaded file...`);
+      setPreviewData(jsonData.slice(0, 5));
       setImportStatus({ total: jsonData.length, processed: 0, errors: [] });
+
+      // Clear existing data first
+      localStorage.removeItem('activeClients');
+      localStorage.removeItem('clientEncounters');
+
+      // Process the uploaded data using the same logic as processImport
+      await processExcelData(jsonData);
+
     } catch (error) {
       console.error('Error reading file:', error);
       setImportStatus({
@@ -130,7 +141,150 @@ const ClientImporter: React.FC = () => {
         processed: 0,
         errors: ['Failed to read Excel file. Please check the file format.']
       });
+    } finally {
+      setImporting(false);
     }
+  };
+
+  const processExcelData = async (jsonData: ImportedClientData[]) => {
+    console.log(`Processing ${jsonData.length} records...`);
+
+    const processedClients: ProcessedClient[] = [];
+    const errors: string[] = [];
+    
+    // Vista area coordinates for random location assignment
+    const vistaCoords = {
+      minLat: 33.185,
+      maxLat: 33.210,
+      minLng: -117.260,
+      maxLng: -117.230
+    };
+
+    for (let index = 0; index < jsonData.length; index++) {
+      const row = jsonData[index];
+      try {
+        // Parse age
+        let age: number | undefined;
+        if (row.Age) {
+          const parsedAge = parseInt(row.Age.toString());
+          if (!isNaN(parsedAge)) age = parsedAge;
+        }
+
+        // Parse dates
+        let dateCreated = new Date();
+        if (row['Date Created']) {
+          const parsed = new Date(row['Date Created']);
+          if (!isNaN(parsed.getTime())) dateCreated = parsed;
+        }
+
+        let lastContact = new Date();
+        if (row['Last Contact']) {
+          const parsed = new Date(row['Last Contact']);
+          if (!isNaN(parsed.getTime())) lastContact = parsed;
+        }
+
+        // Extract location from AKA and Notes fields
+        let coordinates = { lat: 0, lng: 0 };
+        let locationAddress = 'Vista, CA';
+        
+        // Try to extract location from AKA field
+        const akaMatches = extractLocationFromText(row.AKA || '');
+        // Try to extract location from Notes field
+        const notesMatches = extractLocationFromText(row.Notes || '');
+        
+        // Combine all matches and prioritize those with coordinates
+        const allMatches = [...akaMatches, ...notesMatches];
+        const matchWithCoords = allMatches.find(match => match.coordinates);
+        
+        if (matchWithCoords && matchWithCoords.coordinates) {
+          // Use extracted coordinates
+          coordinates = matchWithCoords.coordinates;
+          locationAddress = `${matchWithCoords.extractedLocation}, Vista, CA`;
+        } else if (allMatches.length > 0) {
+          // Has location text but no coordinates - use random Vista location
+          coordinates = getRandomVistaLocation();
+          locationAddress = `${allMatches[0].extractedLocation}, Vista, CA`;
+        } else {
+          // No location data - use random Vista location
+          coordinates = getRandomVistaLocation();
+          if (row.AKA) {
+            locationAddress = `${row.AKA}, Vista, CA`;
+          }
+        }
+
+        // Create notes array from existing notes
+        const notes: ClientNote[] = [];
+        if (row.Notes) {
+          notes.push({
+            id: `import-${Date.now()}-${index}`,
+            date: dateCreated,
+            note: row.Notes,
+            author: 'Imported from Excel',
+            category: 'general'
+          });
+        }
+
+        const processedClient: ProcessedClient = {
+          id: `excel-import-${Date.now()}-${index}`,
+          firstName: row['First Name'] || '',
+          middleName: row.Middle || '',
+          lastName: row['Last Name'] || '',
+          aka: row.AKA || '',
+          gender: row.Gender || '',
+          ethnicity: row.Ethnicity || '',
+          age: age,
+          height: row.Height || '',
+          weight: row.Weight || '',
+          hairColor: row['Hair Color'] || '',
+          eyeColor: row['Eye Color'] || '',
+          description: row.Description || '',
+          dateCreated,
+          lastContact,
+          contactCount: parseInt(row.Contacts?.toString() || '1'),
+          notes,
+          location: {
+            coordinates,
+            address: locationAddress,
+            timestamp: new Date(),
+            accuracy: matchWithCoords ? 'high' : 'estimated'
+          }
+        };
+
+        processedClients.push(processedClient);
+
+        // Update progress
+        setImportStatus(prev => ({
+          ...prev!,
+          processed: index + 1
+        }));
+
+      } catch (error) {
+        console.error(`Error processing row ${index}:`, error);
+        errors.push(`Row ${index + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+
+    console.log(`Processed ${processedClients.length} clients`);
+
+    // Save to localStorage
+    localStorage.setItem('activeClients', JSON.stringify(processedClients.map(client => ({
+      id: client.id,
+      name: `${client.firstName} ${client.lastName}`.trim(),
+      firstName: client.firstName,
+      lastName: client.lastName,
+      aka: client.aka,
+      dateCreated: client.dateCreated,
+      lastContact: client.lastContact,
+      contactCount: client.contactCount,
+      notes: client.notes.map(note => note.note).join('; '),
+      location: client.location?.address || 'Vista, CA',
+      coordinates: client.location?.coordinates
+    }))));
+
+    setImportStatus(prev => ({
+      ...prev!,
+      errors
+    }));
   };
 
   const processImport = async () => {
@@ -158,7 +312,8 @@ const ClientImporter: React.FC = () => {
 
       console.log(`Found ${jsonData.length} records to import`);
 
-      const processedClients: ProcessedClient[] = [];
+      // Use the shared processing function
+      await processExcelData(jsonData);
       const errors: string[] = [];
       
       // Vista area coordinates for random location assignment
@@ -405,6 +560,108 @@ const ClientImporter: React.FC = () => {
                 {importStatus.errors.length} records had issues but were still imported with available data.
               </Typography>
             )}
+            <Box sx={{ mt: 2 }}>
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={() => {
+                  localStorage.removeItem('activeClients');
+                  localStorage.removeItem('clientEncounters');
+                  setImportStatus(null);
+                  console.log('Cleared all imported data');
+                }}
+                size="small"
+              >
+                Clear All Data
+              </Button>
+            </Box>
+          </Alert>
+        )}
+      </Paper>
+
+      <Paper sx={{ p: 3, mb: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          Clear & Import Fresh Data
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          Replace all current client data with a fresh Excel file (.xls, .xlsx). This is a two-step process:
+        </Typography>
+        
+        {/* Step 1: Clear Data */}
+        <Box sx={{ mb: 3, p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
+          <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+            Step 1: Clear Current Data
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {importStatus && importStatus.processed > 0 
+              ? `You currently have ${importStatus.processed} client records. Clear them first.`
+              : 'Clear any existing client data to prepare for fresh import.'
+            }
+          </Typography>
+          <Button
+            variant="outlined"
+            color="error"
+            onClick={() => {
+              localStorage.removeItem('activeClients');
+              localStorage.removeItem('clientEncounters');
+              setImportStatus(null);
+              setPreviewData([]);
+              console.log('✅ All data cleared - ready for fresh upload');
+            }}
+            disabled={importing}
+          >
+            Clear All Client Data
+          </Button>
+        </Box>
+
+        {/* Step 2: Upload Fresh File */}
+        <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
+          <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+            Step 2: Upload Fresh Excel File
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Select your updated Excel file with new client data.
+          </Typography>
+          
+          <input
+            type="file"
+            accept=".xls,.xlsx"
+            onChange={handleFileUpload}
+            style={{ display: 'none' }}
+            id="fresh-file-upload"
+          />
+          
+          <Button
+            variant="contained"
+            startIcon={<UploadIcon />}
+            onClick={() => document.getElementById('fresh-file-upload')?.click()}
+            color="secondary"
+            disabled={importing}
+          >
+            {importing ? 'Importing...' : 'Choose Excel File'}
+          </Button>
+        </Box>
+
+        {importing && (
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="body2" gutterBottom>
+              Importing fresh data... {importStatus?.processed || 0} / {importStatus?.total || 0}
+            </Typography>
+            <LinearProgress 
+              variant="determinate" 
+              value={(importStatus?.processed || 0) / (importStatus?.total || 1) * 100}
+            />
+          </Box>
+        )}
+
+        {importStatus && importStatus.processed === importStatus.total && importStatus.total > 0 && (
+          <Alert severity="success" sx={{ mt: 3 }}>
+            <Typography variant="subtitle1" gutterBottom>
+              ✅ Successfully imported {importStatus.processed} fresh client records!
+            </Typography>
+            <Typography variant="body2">
+              Your dashboard now shows the updated client data.
+            </Typography>
           </Alert>
         )}
       </Paper>
