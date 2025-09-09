@@ -23,11 +23,8 @@ import {
 } from '@mui/material';
 import {
   Upload as UploadIcon,
-  CheckCircle as CheckCircleIcon,
-  Warning as WarningIcon,
 } from '@mui/icons-material';
 import * as XLSX from 'xlsx';
-import { format } from 'date-fns';
 import { extractLocationFromText, getRandomVistaLocation } from '../utils/locationExtractor';
 
 interface ClientNote {
@@ -107,46 +104,6 @@ const ClientImporter: React.FC = () => {
   } | null>(null);
   const [previewData, setPreviewData] = useState<ImportedClientData[]>([]);
   const [showPreview, setShowPreview] = useState(false);
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setImporting(true);
-    console.log('Starting fresh file import...');
-
-    try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json<ImportedClientData>(worksheet, {
-        raw: false,
-        dateNF: 'MM/DD/YYYY'
-      });
-
-      console.log(`Processing ${jsonData.length} records from uploaded file...`);
-      setPreviewData(jsonData.slice(0, 5));
-      setImportStatus({ total: jsonData.length, processed: 0, errors: [] });
-
-      // Clear existing data first
-      localStorage.removeItem('activeClients');
-      localStorage.removeItem('clientEncounters');
-
-      // Process the uploaded data using the same logic as processImport
-      await processExcelData(jsonData, true); // clearExisting = true for fresh upload
-
-    } catch (error) {
-      console.error('Error reading file:', error);
-      setImportStatus({
-        total: 0,
-        processed: 0,
-        errors: ['Failed to read Excel file. Please check the file format.']
-      });
-    } finally {
-      setImporting(false);
-    }
-  };
 
   const processExcelData = async (jsonData: ImportedClientData[], clearExisting = false) => {
     console.log(`Processing ${jsonData.length} records...`);
@@ -302,6 +259,46 @@ const ClientImporter: React.FC = () => {
       ...prev!,
       errors
     }));
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    console.log('Starting fresh file import...');
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json<ImportedClientData>(worksheet, {
+        raw: false,
+        dateNF: 'MM/DD/YYYY'
+      });
+
+      console.log(`Processing ${jsonData.length} records from uploaded file...`);
+      setPreviewData(jsonData.slice(0, 5));
+      setImportStatus({ total: jsonData.length, processed: 0, errors: [] });
+
+      // Clear existing data first
+      localStorage.removeItem('activeClients');
+      localStorage.removeItem('clientEncounters');
+
+      // Process the uploaded data using the same logic as processImport
+      await processExcelData(jsonData, true); // clearExisting = true for fresh upload
+
+    } catch (error) {
+      console.error('Error reading file:', error);
+      setImportStatus({
+        total: 0,
+        processed: 0,
+        errors: ['Failed to read Excel file. Please check the file format.']
+      });
+    } finally {
+      setImporting(false);
+    }
   };
 
   const processImport = async () => {
