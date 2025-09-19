@@ -23,7 +23,8 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  Grid
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -32,10 +33,12 @@ import {
   Description as LogIcon,
   TrendingUp as StatsIcon,
   Download as DownloadIcon,
-  Edit as EditIcon
+  Edit as EditIcon,
+  ContentCopy as DuplicateIcon
 } from '@mui/icons-material';
 import { supabase } from './lib/supabase';
 import { format } from 'date-fns';
+import DuplicateManagement from './DuplicateManagement';
 
 interface Client {
   id: string;
@@ -76,6 +79,7 @@ export default function AdminDashboard() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [clientInteractions, setClientInteractions] = useState<Interaction[]>([]);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -83,7 +87,13 @@ export default function AdminDashboard() {
 
   const loadData = async () => {
     setLoading(true);
+    setError(null);
     try {
+      // Check if Supabase is configured
+      if (!process.env.REACT_APP_SUPABASE_URL || !process.env.REACT_APP_SUPABASE_ANON_KEY) {
+        throw new Error('Supabase environment variables are not configured. Please add REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY to your environment variables.');
+      }
+
       if (tabValue === 0) {
         await loadStats();
       } else if (tabValue === 1) {
@@ -91,8 +101,9 @@ export default function AdminDashboard() {
       } else if (tabValue === 2) {
         await loadInteractions();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading data:', error);
+      setError(error.message || 'Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -233,12 +244,25 @@ export default function AdminDashboard() {
           <Tab icon={<StatsIcon />} label="Dashboard" />
           <Tab icon={<PeopleIcon />} label="Clients" />
           <Tab icon={<LogIcon />} label="Interactions" />
+          <Tab icon={<DuplicateIcon />} label="Duplicates" />
         </Tabs>
       </Paper>
 
       {/* Content Area */}
       <Box sx={{ p: 3 }}>
-        {loading ? (
+        {error ? (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            <Typography variant="h6" gutterBottom>Configuration Error</Typography>
+            <Typography>{error}</Typography>
+            <Typography variant="body2" sx={{ mt: 2 }}>
+              To fix this issue in production (Vercel), add these environment variables:
+            </Typography>
+            <Typography variant="body2" sx={{ fontFamily: 'monospace', mt: 1 }}>
+              REACT_APP_SUPABASE_URL=your_supabase_url<br/>
+              REACT_APP_SUPABASE_ANON_KEY=your_anon_key
+            </Typography>
+          </Alert>
+        ) : loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
             <CircularProgress />
           </Box>
@@ -451,6 +475,11 @@ export default function AdminDashboard() {
                   </Table>
                 </TableContainer>
               </>
+            )}
+
+            {/* Duplicates Tab */}
+            {tabValue === 3 && (
+              <DuplicateManagement />
             )}
           </>
         )}
